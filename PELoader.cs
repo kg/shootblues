@@ -107,10 +107,10 @@ namespace ShootBlues {
             GlobalPointer = 8,
             ThreadLocalStorage = 9,
             LoadConfig = 10,
-            BoundImport=11,
-            ImportAddressTable=12,
-            DelayImport=13,
-            COMDescriptor=14
+            BoundImport = 11,
+            ImportAddressTable = 12,
+            DelayImport = 13,
+            COMDescriptor = 14
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -209,19 +209,6 @@ namespace ShootBlues {
         public Import[] Imports;
         public Relocation[] Relocations;
 
-        public Section SectionFromVirtualAddressRange (UInt32 addressBegin, UInt32 addressEnd) {
-            return Sections.Values.First(
-                (s) => (addressBegin >= s.VirtualAddress) && (addressEnd < s.VirtualAddress + s.Size)
-            );
-        }
-
-        public Section SectionFromVirtualAddress (UInt32 address) {
-            return SectionFromVirtualAddressRange(address, address);
-        }
-
-        private PortableExecutable () {
-        }
-
         public PortableExecutable (Stream stream) {
             using (var sr = new PEReader(stream)) {
                 if (!sr.CheckHeader("MZ"))
@@ -240,24 +227,31 @@ namespace ShootBlues {
                 DataDirectoryHeaders = sr.ReadStructArray<ImageDataDirectoryHeader>((int)OptionalHeader.NumberOfRvaAndSizes);
                 SectionHeaders = sr.ReadStructArray<ImageSectionHeader>(FileHeader.NumberOfSections);
 
-                var comparer = Comparer<UInt32>.Default;
-                Array.Sort(SectionHeaders, (lhs, rhs) => comparer.Compare(lhs.VirtualAddress, rhs.VirtualAddress));
-
-                Sections = new Dictionary<string, Section>(FileHeader.NumberOfSections);
-                foreach (var sectionHeader in SectionHeaders) {
-                    stream.Seek(sectionHeader.PointerToRawData, SeekOrigin.Begin);
-                    var section = new Section {
-                        Name = sectionHeader.Name,
-                        VirtualAddress = sectionHeader.VirtualAddress,
-                        Size = sectionHeader.SizeOfRawData,
-                        RawData = sr.ReadBytes((int)sectionHeader.SizeOfRawData),
-                        Characteristics = (SectionCharacteristics)sectionHeader.Characteristics
-                    };
-
-                    Sections[section.Name] = section;
-                }
+                LoadSections(sr);
             }
 
+            LoadDataDirectories();
+            LoadImports();
+            LoadRelocations();
+        }
+
+        public void LoadSections (PEReader sr) {
+            Sections = new Dictionary<string, Section>(FileHeader.NumberOfSections);
+            foreach (var sectionHeader in SectionHeaders) {
+                sr.BaseStream.Seek(sectionHeader.PointerToRawData, SeekOrigin.Begin);
+                var section = new Section {
+                    Name = sectionHeader.Name,
+                    VirtualAddress = sectionHeader.VirtualAddress,
+                    Size = sectionHeader.SizeOfRawData,
+                    RawData = sr.ReadBytes((int)sectionHeader.SizeOfRawData),
+                    Characteristics = (SectionCharacteristics)sectionHeader.Characteristics
+                };
+
+                Sections[section.Name] = section;
+            }
+        }
+
+        public void LoadDataDirectories () {
             DataDirectories = new Dictionary<DataDirectoryType, DataDirectory>(DataDirectoryHeaders.Length);
             for (int i = 0; i < DataDirectoryHeaders.Length; i++) {
                 var ddh = DataDirectoryHeaders[i];
@@ -276,9 +270,6 @@ namespace ShootBlues {
                     Size = ddh.Size
                 };
             }
-
-            LoadImports();
-            LoadRelocations();
         }
 
         public unsafe void LoadImports () {
@@ -371,6 +362,37 @@ namespace ShootBlues {
                 buffer = BitConverter.GetBytes(value);
                 Array.Copy(buffer, 0, section.RawData, offset, buffer.Length);
             }
+        }
+
+        public void ResolveImports () {
+            foreach (var import in Imports) {
+                var hModule = Win32.LoadLibrary(import.ModuleName);
+                if (hModule == IntPtr.Zero)
+                    throw new Exception(String.Format("Module load failed: {0}", import.ModuleName));
+
+                try {
+                    var procAddress = Win32.GetProcAddress(hModule, import.FunctionName);
+                    if (procAddress == 0)
+                        throw new Exception(String.Format("Unresolved import: {0}:{1}", import.ModuleName, import.FunctionName));
+
+                    var section = SectionFromVirtualAddress(import.FunctionAddressDestination);
+                    var offset = import.FunctionAddressDestination - section.VirtualAddress;
+                    var bytes = BitConverter.GetBytes(procAddress);
+                    Array.Copy(bytes, 0, section.RawData, offset, bytes.Length);
+                } finally {
+                    Win32.FreeLibrary(hModule);
+                }
+            }
+        }
+
+        public Section SectionFromVirtualAddressRange (UInt32 addressBegin, UInt32 addressEnd) {
+            return Sections.Values.First(
+                (s) => (addressBegin >= s.VirtualAddress) && (addressEnd < s.VirtualAddress + s.Size)
+            );
+        }
+
+        public Section SectionFromVirtualAddress (UInt32 address) {
+            return SectionFromVirtualAddressRange(address, address);
         }
     }
 }
