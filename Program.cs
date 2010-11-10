@@ -44,7 +44,7 @@ namespace ShootBlues {
                 Icon = Properties.Resources.icon,
                 Visible = true
             })
-            using (var pw = new ProcessWatcher("scite.exe")) {
+            using (var pw = new ProcessWatcher("python.exe")) {
                 ProcessEventArgs evt = null;
                 while (true) {
                     yield return pw.Events.Dequeue().Bind(() => evt);

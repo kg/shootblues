@@ -3,5 +3,6 @@
 bin
 obj
 *.dll
-/payload/Build/*
+/payload/Release/*
 *.ncb
+*.pdb

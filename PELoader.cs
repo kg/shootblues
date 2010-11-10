@@ -348,6 +348,7 @@ namespace ShootBlues {
 
             OptionalHeader.ImageBase = newBaseAddress;
 
+            int numRelocations = 0;
             byte[] buffer;
             foreach (var relocation in Relocations) {
                 if (relocation.Type == RelocationType.Absolute)
@@ -361,10 +362,16 @@ namespace ShootBlues {
                 value = (UInt32)(value + delta);
                 buffer = BitConverter.GetBytes(value);
                 Array.Copy(buffer, 0, section.RawData, offset, buffer.Length);
+
+                numRelocations += 1;
             }
+
+            Console.WriteLine("Processed {0} relocation(s) to rebase to {0:x8}.", numRelocations, newBaseAddress);
         }
 
         public void ResolveImports () {
+            int numImports = 0;
+
             foreach (var import in Imports) {
                 var hModule = Win32.LoadLibrary(import.ModuleName);
                 if (hModule == IntPtr.Zero)
@@ -379,10 +386,14 @@ namespace ShootBlues {
                     var offset = import.FunctionAddressDestination - section.VirtualAddress;
                     var bytes = BitConverter.GetBytes(procAddress);
                     Array.Copy(bytes, 0, section.RawData, offset, bytes.Length);
+
+                    numImports += 1;
                 } finally {
                     Win32.FreeLibrary(hModule);
                 }
             }
+
+            Console.WriteLine("Processed {0} import(s).", numImports);
         }
 
         public Section SectionFromVirtualAddressRange (UInt32 addressBegin, UInt32 addressEnd) {

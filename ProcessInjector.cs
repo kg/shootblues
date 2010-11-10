@@ -72,7 +72,8 @@ namespace ShootBlues {
                 IntPtr remoteThreadHandle = Win32.CreateRemoteThread(
                     handle.DangerousGetHandle(), IntPtr.Zero, 0,
                     baseAddress + executable.OptionalHeader.AddressOfEntryPoint,
-                    IntPtr.Zero, creationFlags, out threadId
+                    baseAddress,
+                    creationFlags, out threadId
                 );
                 if (remoteThreadHandle == IntPtr.Zero) {
                     var error = Win32.GetLastError();

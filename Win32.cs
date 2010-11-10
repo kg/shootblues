@@ -104,7 +104,7 @@ namespace ShootBlues {
         [DllImport("kernel32", SetLastError = true)]
         public static extern IntPtr CreateRemoteThread (
             IntPtr hProcess, IntPtr lpThreadAttributes,
-            uint dwStackSize, UInt32 lpStartAddress, IntPtr lpParameter,
+            uint dwStackSize, UInt32 lpStartAddress, UInt32 lpParameter,
             uint dwCreationFlags, out Int32 lpThreadId
         );
         [DllImport("kernel32", SetLastError = true)]

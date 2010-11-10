@@ -3,7 +3,7 @@
 	ProjectType="Visual C++"
 	Version="9.00"
 	Name="payload"
-	ProjectGUID="{EB87BEF2-922A-4DEA-9D2F-290DEC635478}"
+	ProjectGUID="{CB04139C-14DD-4E98-A911-D7F627B3E85F}"
 	RootNamespace="payload"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="196613"
@@ -17,12 +17,11 @@
 	</ToolFiles>
 	<Configurations>
 		<Configuration
-			Name="Build|Win32"
+			Name="Debug|Win32"
 			OutputDirectory="..\"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="2"
 			CharacterSet="1"
-			EnableManagedIncrementalBuild="0"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -42,24 +41,13 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				InlineFunctionExpansion="2"
-				EnableIntrinsicFunctions="true"
-				FavorSizeOrSpeed="1"
-				PreprocessorDefinitions="WIN32;_WINDOWS;_USRDLL"
-				StringPooling="true"
-				MinimalRebuild="false"
-				ExceptionHandling="0"
-				BasicRuntimeChecks="0"
-				RuntimeLibrary="0"
-				BufferSecurityCheck="false"
-				RuntimeTypeInfo="false"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;PAYLOAD_EXPORTS"
+				MinimalRebuild="true"
+				BasicRuntimeChecks="3"
+				RuntimeLibrary="3"
 				UsePrecompiledHeader="0"
-				ExpandAttributedSource="true"
-				AssemblerOutput="2"
 				WarningLevel="3"
-				DebugInformationFormat="0"
-				CallingConvention="0"
-				OmitDefaultLibName="true"
+				DebugInformationFormat="4"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -72,25 +60,86 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				IgnoreImportLibrary="true"
-				LinkLibraryDependencies="false"
-				OutputFile="..\payload.dll"
-				LinkIncremental="1"
-				GenerateManifest="false"
-				EnableUAC="false"
-				IgnoreAllDefaultLibraries="true"
-				GenerateDebugInformation="false"
+				LinkIncremental="2"
+				GenerateDebugInformation="true"
 				SubSystem="2"
-				LargeAddressAware="0"
-				OptimizeReferences="1"
+				TargetMachine="1"
+			/>
+			<Tool
+				Name="VCALinkTool"
+			/>
+			<Tool
+				Name="VCManifestTool"
+			/>
+			<Tool
+				Name="VCXDCMakeTool"
+			/>
+			<Tool
+				Name="VCBscMakeTool"
+			/>
+			<Tool
+				Name="VCFxCopTool"
+			/>
+			<Tool
+				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCPostBuildEventTool"
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release|Win32"
+			OutputDirectory="..\"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="2"
+			CharacterSet="1"
+			WholeProgramOptimization="1"
+			>
+			<Tool
+				Name="VCPreBuildEventTool"
+			/>
+			<Tool
+				Name="VCCustomBuildTool"
+			/>
+			<Tool
+				Name="VCXMLDataGeneratorTool"
+			/>
+			<Tool
+				Name="VCWebServiceProxyGeneratorTool"
+			/>
+			<Tool
+				Name="VCMIDLTool"
+			/>
+			<Tool
+				Name="VCCLCompilerTool"
+				Optimization="2"
+				EnableIntrinsicFunctions="true"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;PAYLOAD_EXPORTS"
+				RuntimeLibrary="0"
+				EnableFunctionLevelLinking="true"
+				UsePrecompiledHeader="0"
+				WarningLevel="3"
+				DebugInformationFormat="3"
+			/>
+			<Tool
+				Name="VCManagedResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCResourceCompilerTool"
+			/>
+			<Tool
+				Name="VCPreLinkEventTool"
+			/>
+			<Tool
+				Name="VCLinkerTool"
+				AdditionalDependencies="C:\python27\libs\python27.lib"
+				LinkIncremental="1"
+				DelayLoadDLLs="python27.dll"
+				GenerateDebugInformation="true"
+				SubSystem="2"
+				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
-				OptimizeForWindows98="0"
-				LinkTimeCodeGeneration="0"
 				EntryPointSymbol="payload"
-				RandomizedBaseAddress="1"
-				FixedBaseAddress="1"
-				TurnOffAssemblyGeneration="true"
-				SupportUnloadOfDelayLoadedDLL="false"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -122,14 +171,6 @@
 		<File
 			RelativePath=".\payload.cpp"
 			>
-			<FileConfiguration
-				Name="Build|Win32"
-				>
-				<Tool
-					Name="VCCLCompilerTool"
-					CallingConvention="2"
-				/>
-			</FileConfiguration>
 		</File>
 	</Files>
 	<Globals>
