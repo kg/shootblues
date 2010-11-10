@@ -6,3 +6,4 @@ obj
 /payload/Release/*
 *.ncb
 *.pdb
+*.sdf

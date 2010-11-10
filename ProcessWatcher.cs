@@ -13,8 +13,6 @@ namespace ShootBlues {
     }
 
     public class ProcessWatcher : IDisposable {
-        public Dictionary<int, Process> Processes = new Dictionary<int, Process>();
-
         public BlockingQueue<ProcessEventArgs> Events = new BlockingQueue<ProcessEventArgs>();
 
         ManagementEventWatcher Watcher;
@@ -36,14 +34,6 @@ namespace ShootBlues {
 
             Process process = null;
             process = Process.GetProcessById(pid);
-            Processes[pid] = process;
-
-            process.Exited += (s, _e) => {
-                process.EnableRaisingEvents = false;
-                Processes.Remove(pid);
-            };
-
-            process.EnableRaisingEvents = true;
 
             Events.Enqueue(new ProcessEventArgs { Process = process, ProcessId = pid });
         }

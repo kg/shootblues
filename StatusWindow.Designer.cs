@@ -1,5 +1,5 @@
 ﻿namespace ShootBlues {
-    partial class MainWindow {
+    partial class StatusWindow {
         /// <summary>
         /// Required designer variable.
         /// </summary>
@@ -24,15 +24,15 @@
         /// </summary>
         private void InitializeComponent () {
             this.components = new System.ComponentModel.Container();
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainWindow));
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(StatusWindow));
             this.RunningProcessGroupBox = new System.Windows.Forms.GroupBox();
             this.RunningProcessList = new System.Windows.Forms.ListBox();
             this.Tabs = new System.Windows.Forms.TabControl();
             this.ScriptsPage = new System.Windows.Forms.TabPage();
-            this.listView1 = new System.Windows.Forms.ListView();
-            this.button1 = new System.Windows.Forms.Button();
-            this.button2 = new System.Windows.Forms.Button();
             this.button3 = new System.Windows.Forms.Button();
+            this.button2 = new System.Windows.Forms.Button();
+            this.button1 = new System.Windows.Forms.Button();
+            this.listView1 = new System.Windows.Forms.ListView();
             this.TabImageList = new System.Windows.Forms.ImageList(this.components);
             this.RunningProcessGroupBox.SuspendLayout();
             this.Tabs.SuspendLayout();
@@ -50,7 +50,7 @@
             this.RunningProcessGroupBox.Size = new System.Drawing.Size(433, 90);
             this.RunningProcessGroupBox.TabIndex = 0;
             this.RunningProcessGroupBox.TabStop = false;
-            this.RunningProcessGroupBox.Text = "Running EVE Processes";
+            this.RunningProcessGroupBox.Text = "Running Processes";
             // 
             // RunningProcessList
             // 
@@ -94,26 +94,18 @@
             this.ScriptsPage.Text = "Scripts";
             this.ScriptsPage.UseVisualStyleBackColor = true;
             // 
-            // listView1
+            // button3
             // 
-            this.listView1.Location = new System.Drawing.Point(6, 6);
-            this.listView1.Name = "listView1";
-            this.listView1.Size = new System.Drawing.Size(414, 240);
-            this.listView1.TabIndex = 0;
-            this.listView1.UseCompatibleStateImageBehavior = false;
-            // 
-            // button1
-            // 
-            this.button1.Enabled = false;
-            this.button1.Image = ((System.Drawing.Image)(resources.GetObject("button1.Image")));
-            this.button1.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.button1.Location = new System.Drawing.Point(6, 252);
-            this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(125, 27);
-            this.button1.TabIndex = 1;
-            this.button1.Text = "&Load Script...";
-            this.button1.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.button1.UseVisualStyleBackColor = true;
+            this.button3.Enabled = false;
+            this.button3.Image = ((System.Drawing.Image)(resources.GetObject("button3.Image")));
+            this.button3.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.button3.Location = new System.Drawing.Point(320, 252);
+            this.button3.Name = "button3";
+            this.button3.Size = new System.Drawing.Size(100, 27);
+            this.button3.TabIndex = 3;
+            this.button3.Text = "&Reload All";
+            this.button3.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.button3.UseVisualStyleBackColor = true;
             // 
             // button2
             // 
@@ -128,18 +120,26 @@
             this.button2.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.button2.UseVisualStyleBackColor = true;
             // 
-            // button3
+            // button1
             // 
-            this.button3.Enabled = false;
-            this.button3.Image = ((System.Drawing.Image)(resources.GetObject("button3.Image")));
-            this.button3.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.button3.Location = new System.Drawing.Point(320, 252);
-            this.button3.Name = "button3";
-            this.button3.Size = new System.Drawing.Size(100, 27);
-            this.button3.TabIndex = 3;
-            this.button3.Text = "&Reload All";
-            this.button3.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.button3.UseVisualStyleBackColor = true;
+            this.button1.Enabled = false;
+            this.button1.Image = ((System.Drawing.Image)(resources.GetObject("button1.Image")));
+            this.button1.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.button1.Location = new System.Drawing.Point(6, 252);
+            this.button1.Name = "button1";
+            this.button1.Size = new System.Drawing.Size(125, 27);
+            this.button1.TabIndex = 1;
+            this.button1.Text = "&Load Script...";
+            this.button1.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.button1.UseVisualStyleBackColor = true;
+            // 
+            // listView1
+            // 
+            this.listView1.Location = new System.Drawing.Point(6, 6);
+            this.listView1.Name = "listView1";
+            this.listView1.Size = new System.Drawing.Size(414, 240);
+            this.listView1.TabIndex = 0;
+            this.listView1.UseCompatibleStateImageBehavior = false;
             // 
             // TabImageList
             // 
@@ -147,7 +147,7 @@
             this.TabImageList.TransparentColor = System.Drawing.Color.Transparent;
             this.TabImageList.Images.SetKeyName(0, "script.png");
             // 
-            // MainWindow
+            // StatusWindow
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.ClientSize = new System.Drawing.Size(437, 414);
@@ -157,7 +157,8 @@
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
-            this.Name = "MainWindow";
+            this.Name = "StatusWindow";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Shoot Blues $version";
             this.RunningProcessGroupBox.ResumeLayout(false);
             this.Tabs.ResumeLayout(false);

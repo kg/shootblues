@@ -5,6 +5,7 @@ using System.Text;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
+using System.Security;
 
 namespace ShootBlues {
     [Flags]
@@ -18,6 +19,12 @@ namespace ShootBlues {
         TopDown = 0x100000,
         WriteWatch = 0x200000,
         LargePages = 0x20000000
+    }
+
+    [Flags]
+    public enum FreeType : uint {
+        Decommit = 0x4000,
+        Release = 0x8000
     }
 
     [Flags]
@@ -74,14 +81,17 @@ namespace ShootBlues {
     }
 
     public static class Win32 {
-        [DllImport("kernel32.dll", SetLastError = true)]
+        [DllImport("kernel32", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool CloseHandle (IntPtr hObject);
         [DllImport("kernel32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
         public static extern IntPtr LoadLibrary (string lpFileName);
         [DllImport("kernel32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
         public static extern bool FreeLibrary (IntPtr hModule);
         [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
         public static extern UInt32 GetProcAddress (IntPtr hModule, string procName);
         [DllImport("kernel32", SetLastError = true, ExactSpelling = true)]
         public static extern IntPtr VirtualAllocEx (
@@ -95,6 +105,11 @@ namespace ShootBlues {
             uint dwSize, MemoryProtection flNewProtect,
             out MemoryProtection flOldProtect
         );
+        [DllImport("kernel32", SetLastError = true, ExactSpelling = true)]
+        public static extern IntPtr VirtualFreeEx (
+            IntPtr hProcess, IntPtr lpAddress,
+            uint dwSize, FreeType dwFreeType
+        );
         [DllImport("kernel32", SetLastError = true)]
         public static extern bool WriteProcessMemory (
             IntPtr hProcess, UInt32 lpBaseAddress,
@@ -104,8 +119,8 @@ namespace ShootBlues {
         [DllImport("kernel32", SetLastError = true)]
         public static extern IntPtr CreateRemoteThread (
             IntPtr hProcess, IntPtr lpThreadAttributes,
-            uint dwStackSize, UInt32 lpStartAddress, UInt32 lpParameter,
-            uint dwCreationFlags, out Int32 lpThreadId
+            uint dwStackSize, UInt32 lpStartAddress, IntPtr lpParameter,
+            uint dwCreationFlags, out UInt32 lpThreadId
         );
         [DllImport("kernel32", SetLastError = true)]
         public static extern IntPtr OpenProcess (
@@ -118,5 +133,15 @@ namespace ShootBlues {
         public static extern Int32 GetLastError ();
         [DllImport("kernel32", SetLastError = true)]
         public static extern bool GetExitCodeThread (IntPtr hThread, out Int32 exitCode);
+        [DllImport("user32", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int RegisterWindowMessage (string lpString);
+        [return: MarshalAs(UnmanagedType.Bool)]
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern bool PostMessage (IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+        [return: MarshalAs(UnmanagedType.Bool)]
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern bool PostThreadMessage (UInt32 threadId, int Msg, IntPtr wParam, UInt32 lParam);
     }
 }
