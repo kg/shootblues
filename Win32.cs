@@ -94,27 +94,38 @@ namespace ShootBlues {
         [SuppressUnmanagedCodeSecurity]
         public static extern UInt32 GetProcAddress (IntPtr hModule, string procName);
         [DllImport("kernel32", SetLastError = true, ExactSpelling = true)]
+        [SuppressUnmanagedCodeSecurity]
         public static extern IntPtr VirtualAllocEx (
             IntPtr hProcess, IntPtr lpAddress,
             uint dwSize, AllocationType flAllocationType,
             MemoryProtection flProtect
         );
         [DllImport("kernel32", SetLastError = true, ExactSpelling = true)]
+        [SuppressUnmanagedCodeSecurity]
         public static extern bool VirtualProtectEx (
             IntPtr hProcess, UInt32 lpAddress,
             uint dwSize, MemoryProtection flNewProtect,
             out MemoryProtection flOldProtect
         );
         [DllImport("kernel32", SetLastError = true, ExactSpelling = true)]
+        [SuppressUnmanagedCodeSecurity]
         public static extern IntPtr VirtualFreeEx (
             IntPtr hProcess, IntPtr lpAddress,
             uint dwSize, FreeType dwFreeType
         );
         [DllImport("kernel32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
         public static extern bool WriteProcessMemory (
             IntPtr hProcess, UInt32 lpBaseAddress,
             IntPtr lpSrc, uint nSize,
             out int lpNumberOfBytesWritten
+        );
+        [DllImport("kernel32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern bool ReadProcessMemory (
+            IntPtr hProcess, IntPtr lpBaseAddress,
+            IntPtr lpDest, uint nSize,
+            out int lpNumberOfBytesRead
         );
         [DllImport("kernel32", SetLastError = true)]
         public static extern IntPtr CreateRemoteThread (

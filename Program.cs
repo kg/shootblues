@@ -131,9 +131,11 @@ namespace ShootBlues {
                     pi.Status = "Payload injected";
                     RunningProcessesChanged.Set();
 
-                    yield return new Start(TestRPC(pi));
+                    var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
 
-                    yield return payloadResult;
+                    using (fRpcTask)
+                        yield return payloadResult;
+
                     pi.Status = String.Format("Payload terminated with exit code {0}.", payloadResult.Result);
                     RunningProcessesChanged.Set();
                 }
@@ -145,10 +147,22 @@ namespace ShootBlues {
             RunningProcessesChanged.Set();
         }
 
-        public static IEnumerator<object> TestRPC (ProcessInfo pi) {
+        public static IEnumerator<object> RPCTask (ProcessInfo pi) {
+            yield return pi.Channel.Receive();
+            pi.Status = "RPC channel open";
+            RunningProcessesChanged.Set();
+
             yield return Future.RunInThread(
-                () => pi.Channel.Send(Encoding.ASCII.GetBytes("print 5 + 5\n\0"))
+                () => pi.Channel.Send(Encoding.ASCII.GetBytes("print 'Hello from Shoot Blues!'\0"))
             );
+
+            while (true) {
+                var fMessage = pi.Channel.Receive();
+                yield return fMessage;
+
+                pi.Status = Encoding.ASCII.GetString(fMessage.Result);
+                RunningProcessesChanged.Set();
+            }
         }
     }
 }

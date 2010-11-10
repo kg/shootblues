@@ -7,17 +7,13 @@ using Squared.Task;
 using System.Diagnostics;
 
 namespace ShootBlues {
-    public struct RPCMessage {
-        public IntPtr WParam, LParam;
-    }
-
     public class RPCChannel : NativeWindow, IDisposable {
         private int WM_RPC_MESSAGE;
         private const int WS_EX_NOACTIVATE = 0x08000000;
 
         private Process _Process;
+        private BlockingQueue<byte[]> _Messages = new BlockingQueue<byte[]>();
 
-        public BlockingQueue<RPCMessage> Messages = new BlockingQueue<RPCMessage>();
         public UInt32 RemoteThreadId = 0;
 
         public RPCChannel (Process process) 
@@ -38,15 +34,39 @@ namespace ShootBlues {
             CreateHandle(cp);
         }
 
+        protected unsafe byte[] ReadRemoteData (IntPtr address, UInt32 size) {
+            int bytesRead = 0;
+            byte[] result = new byte[size];
+            using (var handle = new SafeProcessHandle(
+                Win32.OpenProcess(ProcessAccessFlags.All, false, _Process.Id)
+            ))
+            fixed (byte* pResult = result)
+                Win32.ReadProcessMemory(
+                    handle.DangerousGetHandle(), address,
+                    new IntPtr(pResult), size,
+                    out bytesRead
+                );
+
+            if (bytesRead != 0)
+                return result;
+            else
+                return null;
+        }
+
         protected override void WndProc (ref Message m) {
             if (m.Msg == WM_RPC_MESSAGE) {
-                Messages.Enqueue(new RPCMessage {
-                    WParam = m.WParam,
-                    LParam = m.LParam
-                });
+                byte[] messageData = null;
+                if ((m.WParam != IntPtr.Zero) && (m.LParam != IntPtr.Zero))
+                    messageData = ReadRemoteData(m.WParam, (uint)m.LParam.ToInt64());
+
+                _Messages.Enqueue(messageData);
             } else {
                 base.WndProc(ref m);
             }
+        }
+
+        public Future<byte[]> Receive () {
+            return _Messages.Dequeue();
         }
 
         public unsafe void Send (byte[] data) {

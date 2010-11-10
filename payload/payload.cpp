@@ -1,18 +1,58 @@
 #include <windows.h>
 #include "C:\python27\include\python.h"
 
+static HWND g_rpcWindow;
+static int g_rpcMessageId;
+
+PyObject * rpcSend(PyObject *self, PyObject *args) {
+    const char *messageBody;
+    if (!PyArg_ParseTuple(args, "s", &messageBody))
+        return NULL;
+
+    // Allocate enough memory to hold our message body and store it there
+    size_t regionSize = strlen(messageBody) + 1;
+    LPVOID region = VirtualAlloc(0, regionSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+
+    strcpy((char *)region, messageBody);
+
+    // Post a message to our parent process (it will free our memory region once it gets the message)
+    PostMessage(
+      g_rpcWindow, g_rpcMessageId, 
+      reinterpret_cast<WPARAM>(region), 
+      *reinterpret_cast<LPARAM*>(&regionSize)
+    );
+
+    return Py_BuildValue("b", true);
+}
+
+static PyMethodDef PythonMethods[] = {
+    {"rpcSend", rpcSend, METH_VARARGS, "Send an RPC message to the parent process."},
+    {NULL, NULL, 0, NULL}
+};
+
 DWORD __stdcall payload (HWND rpcWindow) {
+  // Wait for an initialized python environment in our host process
   while (!Py_IsInitialized())
     Sleep(100);
 
-  UINT WM_RPC_MESSAGE = RegisterWindowMessage(L"ShootBlues.RPCMessage");
-  MSG msg;
+  g_rpcWindow = rpcWindow;
+  g_rpcMessageId = RegisterWindowMessage(L"ShootBlues.RPCMessage");
 
-  PeekMessage(&msg, 0, WM_RPC_MESSAGE, WM_RPC_MESSAGE, 0);
-  PostMessage(rpcWindow, WM_RPC_MESSAGE, 0, 0);
+  MSG msg;
+  // Create our thread message queue
+  PeekMessage(&msg, 0, g_rpcMessageId, g_rpcMessageId, 0);
+
+  // Initialize our python extensions
+  PyGILState_STATE gil = PyGILState_Ensure();
+  Py_InitModule("shootblues", PythonMethods);
+  PyGILState_Release(gil);
+
+  // Post a null message to alert the parent process that we are alive and ready for messages
+  PostMessage(rpcWindow, g_rpcMessageId, 0, 0);
 
   BOOL result;
-  while ((result = GetMessage( &msg, 0, WM_RPC_MESSAGE, WM_RPC_MESSAGE )) != 0) { 
+  while ((result = GetMessage( &msg, 0, g_rpcMessageId, g_rpcMessageId )) != 0) {
+    // We've been told to terminate our message queue
     if (result == -1)
       break;
 
@@ -21,8 +61,13 @@ DWORD __stdcall payload (HWND rpcWindow) {
     
     PyGILState_STATE gil = PyGILState_Ensure();
 
-    PyCodeObject * codeObject = (PyCodeObject *)Py_CompileStringFlags(script, "shootblues", Py_file_input, 0);
+    PyCodeObject * codeObject = (PyCodeObject *)Py_CompileStringFlags(
+      script, "shootblues", Py_file_input, 0
+    );
+
+    // Free the memory block containing the message body since we've parsed it now
     VirtualFree(script, scriptSize, MEM_RELEASE);
+
     if (codeObject) {
 
       PyObject * module = PyImport_AddModule("__main__");
