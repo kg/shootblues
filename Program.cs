@@ -11,6 +11,10 @@ namespace ShootBlues {
         public Process Process;
         public RPCChannel Channel;
         public string Status;
+
+        public override string ToString () {
+            return String.Format("{0} - {1}", Process.Id, Status);
+        }
     }
 
     static class Program {

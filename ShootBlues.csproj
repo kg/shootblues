@@ -67,6 +67,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="EnterPythonDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="EnterPythonDialog.Designer.cs">
+      <DependentUpon>EnterPythonDialog.cs</DependentUpon>
+    </Compile>
     <Compile Include="StatusWindow.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -118,6 +124,9 @@
     <None Include="icon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="EnterPythonDialog.resx">
+      <DependentUpon>EnterPythonDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="payload.dll" />
   </ItemGroup>
   <ItemGroup>

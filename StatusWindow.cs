@@ -20,10 +20,31 @@ namespace ShootBlues {
                 RunningProcessList.BeginUpdate();
                 RunningProcessList.Items.Clear();
                 foreach (var pi in Program.RunningProcesses)
-                    RunningProcessList.Items.Add(String.Format("{0} - {1}", pi.Process.Id, pi.Status));
+                    RunningProcessList.Items.Add(pi);
                 RunningProcessList.EndUpdate();
 
                 yield return Program.RunningProcessesChanged.Wait();
+            }
+        }
+
+        private void RunPythonMenu_Click (object sender, EventArgs e) {
+            var process = (ProcessInfo)ProcessMenu.Tag;
+
+            using (var dialog = new EnterPythonDialog())
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    process.Channel.Send(Encoding.ASCII.GetBytes(dialog.PythonText.Text));
+        }
+
+        private void RunningProcessList_MouseDown (object sender, MouseEventArgs e) {
+            var index = RunningProcessList.IndexFromPoint(e.X, e.Y);
+            if (index == ListBox.NoMatches)
+                return;
+
+            RunningProcessList.SelectedIndex = index;
+
+            if (e.Button == MouseButtons.Right) {
+                ProcessMenu.Tag = RunningProcessList.Items[index];
+                ProcessMenu.Show(RunningProcessList, new Point(e.X, e.Y));
             }
         }
     }

@@ -25,7 +25,7 @@ PyObject * rpcSend(PyObject *self, PyObject *args) {
         reinterpret_cast<WPARAM>(region), 
         *reinterpret_cast<LPARAM*>(&regionSize)
       ))
-        return PyBool_FromLong(1);
+        return Py_BuildValue("");
     }
 
     PyErr_SetFromWindowsErr(GetLastError());
@@ -79,9 +79,8 @@ DWORD __stdcall payload (HWND rpcWindow) {
 
     if (codeObject) {
 
-      PyObject * module = PyImport_AddModule("shootblues");
+      PyObject * module = PyImport_AddModule("__main__");
       if (module != NULL) {
-
         PyObject * globals = PyModule_GetDict(module);
         PyObject * result = PyEval_EvalCode(codeObject, globals, globals);
 

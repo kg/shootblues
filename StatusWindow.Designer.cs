@@ -33,10 +33,13 @@
             this.button2 = new System.Windows.Forms.Button();
             this.button1 = new System.Windows.Forms.Button();
             this.listView1 = new System.Windows.Forms.ListView();
-            this.TabImageList = new System.Windows.Forms.ImageList(this.components);
+            this.ImageList = new System.Windows.Forms.ImageList(this.components);
+            this.ProcessMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this.RunPythonMenu = new System.Windows.Forms.ToolStripMenuItem();
             this.RunningProcessGroupBox.SuspendLayout();
             this.Tabs.SuspendLayout();
             this.ScriptsPage.SuspendLayout();
+            this.ProcessMenu.SuspendLayout();
             this.SuspendLayout();
             // 
             // RunningProcessGroupBox
@@ -65,6 +68,7 @@
             this.RunningProcessList.Name = "RunningProcessList";
             this.RunningProcessList.Size = new System.Drawing.Size(421, 64);
             this.RunningProcessList.TabIndex = 0;
+            this.RunningProcessList.MouseDown += new System.Windows.Forms.MouseEventHandler(this.RunningProcessList_MouseDown);
             // 
             // Tabs
             // 
@@ -72,7 +76,7 @@
                         | System.Windows.Forms.AnchorStyles.Left)
                         | System.Windows.Forms.AnchorStyles.Right)));
             this.Tabs.Controls.Add(this.ScriptsPage);
-            this.Tabs.ImageList = this.TabImageList;
+            this.Tabs.ImageList = this.ImageList;
             this.Tabs.Location = new System.Drawing.Point(2, 98);
             this.Tabs.Name = "Tabs";
             this.Tabs.SelectedIndex = 0;
@@ -141,11 +145,25 @@
             this.listView1.TabIndex = 0;
             this.listView1.UseCompatibleStateImageBehavior = false;
             // 
-            // TabImageList
+            // ImageList
             // 
-            this.TabImageList.ImageStream = ((System.Windows.Forms.ImageListStreamer)(resources.GetObject("TabImageList.ImageStream")));
-            this.TabImageList.TransparentColor = System.Drawing.Color.Transparent;
-            this.TabImageList.Images.SetKeyName(0, "script.png");
+            this.ImageList.ImageStream = ((System.Windows.Forms.ImageListStreamer)(resources.GetObject("ImageList.ImageStream")));
+            this.ImageList.TransparentColor = System.Drawing.Color.Transparent;
+            this.ImageList.Images.SetKeyName(0, "script.png");
+            // 
+            // ProcessMenu
+            // 
+            this.ProcessMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.RunPythonMenu});
+            this.ProcessMenu.Name = "ProcessMenu";
+            this.ProcessMenu.Size = new System.Drawing.Size(146, 26);
+            // 
+            // RunPythonMenu
+            // 
+            this.RunPythonMenu.Name = "RunPythonMenu";
+            this.RunPythonMenu.Size = new System.Drawing.Size(152, 22);
+            this.RunPythonMenu.Text = "&Run Python...";
+            this.RunPythonMenu.Click += new System.EventHandler(this.RunPythonMenu_Click);
             // 
             // StatusWindow
             // 
@@ -163,6 +181,7 @@
             this.RunningProcessGroupBox.ResumeLayout(false);
             this.Tabs.ResumeLayout(false);
             this.ScriptsPage.ResumeLayout(false);
+            this.ProcessMenu.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
@@ -177,7 +196,9 @@
         private System.Windows.Forms.ListView listView1;
         private System.Windows.Forms.Button button3;
         private System.Windows.Forms.Button button2;
-        private System.Windows.Forms.ImageList TabImageList;
+        private System.Windows.Forms.ImageList ImageList;
+        private System.Windows.Forms.ContextMenuStrip ProcessMenu;
+        private System.Windows.Forms.ToolStripMenuItem RunPythonMenu;
     }
 }
 
