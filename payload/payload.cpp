@@ -16,17 +16,20 @@ PyObject * rpcSend(PyObject *self, PyObject *args) {
     // Allocate enough memory to hold our message body and store it there
     size_t regionSize = strlen(messageBody) + 1;
     LPVOID region = VirtualAlloc(0, regionSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    if (region) {
+      strcpy((char *)region, messageBody);
 
-    strcpy((char *)region, messageBody);
+      // Post a message to our parent process (it will free our memory region once it gets the message)
+      if (PostMessage(
+        g_rpcWindow, g_rpcMessageId, 
+        reinterpret_cast<WPARAM>(region), 
+        *reinterpret_cast<LPARAM*>(&regionSize)
+      ))
+        return PyBool_FromLong(1);
+    }
 
-    // Post a message to our parent process (it will free our memory region once it gets the message)
-    PostMessage(
-      g_rpcWindow, g_rpcMessageId, 
-      reinterpret_cast<WPARAM>(region), 
-      *reinterpret_cast<LPARAM*>(&regionSize)
-    );
-
-    return PyBool_FromLong(1);
+    PyErr_SetFromWindowsErr(GetLastError());
+    return NULL;
 }
 
 static PyMethodDef PythonMethods[] = {

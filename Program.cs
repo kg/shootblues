@@ -27,15 +27,17 @@ namespace ShootBlues {
             using (Scheduler = new TaskScheduler(JobQueue.WindowsMessageBased)) {
                 Scheduler.ErrorHandler = OnTaskError;
 
-                Scheduler.Start(MainTask(), TaskExecutionPolicy.RunAsBackgroundTask)
-                    .RegisterOnComplete((_) => {
-                        if (_.Failed)
+                using (var fMainTask = Scheduler.Start(MainTask(), TaskExecutionPolicy.RunAsBackgroundTask)) {
+                    fMainTask.RegisterOnComplete((_) => {
+                        if (_.Failed) {
                             ExitCode = 1;
-                    
-                        Application.Exit(); 
+                            Application.Exit();
+                        }
                     });
 
-                Application.Run();
+                    Application.Run();
+                    fMainTask.Dispose();
+                }
             }
 
             Environment.Exit(ExitCode);
