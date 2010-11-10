@@ -4,10 +4,14 @@
 static HWND g_rpcWindow;
 static int g_rpcMessageId;
 
+static PyObject * g_excValueError;
+
 PyObject * rpcSend(PyObject *self, PyObject *args) {
     const char *messageBody;
-    if (!PyArg_ParseTuple(args, "s", &messageBody))
-        return NULL;
+    if (!PyArg_ParseTuple(args, "s", &messageBody)) {
+      PyErr_SetString(g_excValueError, "rpcSend requires a message body string as its only argument");
+      return NULL;
+    }
 
     // Allocate enough memory to hold our message body and store it there
     size_t regionSize = strlen(messageBody) + 1;
@@ -22,7 +26,7 @@ PyObject * rpcSend(PyObject *self, PyObject *args) {
       *reinterpret_cast<LPARAM*>(&regionSize)
     );
 
-    return Py_BuildValue("b", true);
+    return PyBool_FromLong(1);
 }
 
 static PyMethodDef PythonMethods[] = {
@@ -44,6 +48,8 @@ DWORD __stdcall payload (HWND rpcWindow) {
 
   // Initialize our python extensions
   PyGILState_STATE gil = PyGILState_Ensure();
+  PyObject * exceptionsModule = PyImport_ImportModule("exceptions");
+  g_excValueError = PyObject_GetAttrString(exceptionsModule, "ValueError");
   Py_InitModule("shootblues", PythonMethods);
   PyGILState_Release(gil);
 
@@ -70,7 +76,7 @@ DWORD __stdcall payload (HWND rpcWindow) {
 
     if (codeObject) {
 
-      PyObject * module = PyImport_AddModule("__main__");
+      PyObject * module = PyImport_AddModule("shootblues");
       if (module != NULL) {
 
         PyObject * globals = PyModule_GetDict(module);
