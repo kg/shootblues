@@ -54,49 +54,41 @@ PyObject * rpcSend (PyObject * self, PyObject * args) {
     return NULL;
 }
 
-void errorHandler (const char * context) {
-  if (PyErr_Occurred()) {
-    PyObject *errType = 0, *errValue = 0, *traceback = 0;
-    PyErr_Fetch(&errType, &errValue, &traceback);
-    if (!errType)
-      errType = Py_BuildValue("");
-    if (!errValue)
-      errValue = Py_BuildValue("");
-    if (!traceback)
-      traceback = Py_BuildValue("");
-    PyObject * format_exception = PyObject_GetAttrString(g_tracebackModule, "format_exception");
-    PyObject * args = PyTuple_Pack(3, errType, errValue, traceback);
-    PyObject * exception = PyObject_CallObject(format_exception, args);
-    if (exception) {
-      if (context) {
-        PyObject * contextObj = PyString_FromString(context);
-        PyList_Append(exception, contextObj);
-        Py_DECREF(contextObj);
-      }
+void errorHandler () {
+  PyObject *errType = 0, *errValue = 0, *traceback = 0;
+  PyErr_Fetch(&errType, &errValue, &traceback);
+  if (!errType)
+    errType = Py_BuildValue("");
+  if (!errValue)
+    errValue = Py_BuildValue("");
+  if (!traceback)
+    traceback = Py_BuildValue("");
 
-      PyObject * separator = PyString_FromString("");
-      PyObject * exceptionString = _PyString_Join(separator, exception);
-      Py_DECREF(separator);
-      Py_DECREF(exception);
-      if (exceptionString) {
-        Py_DECREF(args);
-        args = PyTuple_Pack(1, exceptionString);
-        PyObject * result = rpcSend(0, args);
-        if (result)
-          Py_DECREF(result);
-        Py_DECREF(exceptionString);
-      }
+  PyObject * format_exception = PyObject_GetAttrString(g_tracebackModule, "format_exception");
+  PyObject * args = PyTuple_Pack(3, errType, errValue, traceback);
+  PyObject * exception = PyObject_CallObject(format_exception, args);
+
+  if (exception) {
+    PyObject * separator = PyString_FromString("");
+    PyObject * exceptionString = _PyString_Join(separator, exception);
+    Py_XDECREF(separator);
+    Py_XDECREF(exception);
+    if (exceptionString) {
+      Py_XDECREF(args);
+      args = PyTuple_Pack(1, exceptionString);
+      PyObject * result = rpcSend(0, args);
+      Py_XDECREF(result);
+      Py_XDECREF(exceptionString);
     }
-    Py_DECREF(args);
-    Py_DECREF(format_exception);
-    if (errType)
-      Py_DECREF(errType);
-    if (errValue)
-      Py_DECREF(errValue);
-    if (traceback)
-      Py_DECREF(traceback);
-    PyErr_Clear();
   }
+
+  Py_XDECREF(args);
+  Py_XDECREF(format_exception);
+  Py_XDECREF(errType);
+  Py_XDECREF(errValue);
+  Py_XDECREF(traceback);
+
+  PyErr_Clear();
 }
 
 void runString (const char * script) {
@@ -110,10 +102,11 @@ void runString (const char * script) {
       PyObject * globals = PyModule_GetDict(module);
       PyObject * result = PyEval_EvalCode(codeObject, globals, globals);
 
-      if (result != NULL) {
+      if (result != NULL)
         Py_DECREF(result);
-        errorHandler("in runString");
-      }
+
+      if (PyErr_Occurred())
+        errorHandler();
     } 
 
     Py_DECREF(codeObject);
@@ -190,7 +183,7 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
   }
 
   Py_DECREF(iter);
-  Py_DECREF(sysModules);
+  Py_XDECREF(sysModules);
 
   // Import all modules
   iter = PyObject_GetIter(moduleNames);
@@ -201,7 +194,7 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
     if (module)
       Py_DECREF(module);
     else
-      errorHandler(PyString_AsString(fullname));
+      errorHandler();
 
     Py_DECREF(fullname);
     Py_DECREF(name);
@@ -251,15 +244,16 @@ PyObject * loadModule (PyObject * self, PyObject * args) {
   }
 
   PyObject * sysModules = PyObject_GetAttrString(g_sysModule, "modules");
-  if (PyMapping_HasKeyString(sysModules, moduleName)) {
+  if (sysModules && PyMapping_HasKeyString(sysModules, moduleName)) {
     PyObject * result = PyMapping_GetItemString(sysModules, moduleName);
     return result;
   }
-  Py_DECREF(sysModules);
+  Py_XDECREF(sysModules);
 
   PyObject * codeObject = Py_CompileStringFlags(
     PyString_AsString(scriptText), moduleName + 11, Py_file_input, 0
   );
+  Py_XDECREF(scriptText);
 
   if (codeObject) {
     PyObject * module = PyImport_ExecCodeModuleEx(moduleName, codeObject, moduleName + 11);
@@ -358,7 +352,8 @@ DWORD __stdcall payload (HWND rpcWindow) {
         break;
     }
 
-    errorHandler("in main loop");
+    if (PyErr_Occurred())
+      errorHandler();
 
     PyGILState_Release(gil);
 
