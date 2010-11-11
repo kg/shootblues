@@ -130,8 +130,42 @@ PyObject * removeModule (PyObject * self, PyObject * args) {
 }
 
 PyObject * reloadModules (PyObject * self, PyObject * args) {
-  PyErr_SetString(g_excException, "Not implemented");
-  return NULL;
+  PyObject * moduleNames = PyMapping_Keys(g_moduleDict);
+  PyObject * sysModules = PyObject_GetAttrString(g_sysModule, "modules");
+
+  // Unload all modules
+  PyObject * iter = PyObject_GetIter(moduleNames);
+  while (PyObject * name = PyIter_Next(iter)) {
+    PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
+
+    PyMapping_DelItem(sysModules, fullname);
+    PyObject_DelAttr(g_module, name);
+
+    Py_DECREF(fullname);
+    Py_DECREF(name);
+  }
+
+  Py_DECREF(iter);
+  Py_DECREF(sysModules);
+
+  // Import all modules
+  iter = PyObject_GetIter(moduleNames);
+  while (PyObject * name = PyIter_Next(iter)) {
+    PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
+    PyObject * module = PyImport_Import(fullname);
+
+    if (module)
+      Py_DECREF(module);
+    else
+      PyErr_Print();
+
+    Py_DECREF(fullname);
+    Py_DECREF(name);
+  }
+
+  Py_DECREF(moduleNames);
+  
+  return Py_BuildValue("");
 }
 
 PyObject * findModule (PyObject * self, PyObject * args, PyObject * kwargs) {
@@ -177,6 +211,7 @@ PyObject * loadModule (PyObject * self, PyObject * args) {
     PyObject * result = PyMapping_GetItemString(sysModules, moduleName);
     return result;
   }
+  Py_DECREF(sysModules);
 
   PyObject * codeObject = Py_CompileStringFlags(
     PyString_AsString(scriptText), moduleName + 11, Py_file_input, 0
@@ -187,10 +222,6 @@ PyObject * loadModule (PyObject * self, PyObject * args) {
 
     if (module != NULL) {
       PyObject_SetAttrString(module, "__loader__", g_module);
-
-      // PyObject_SetAttrString(g_module, moduleName + 11, module);
-
-      // PyMapping_SetItemString(sysModules, moduleName, module);
       Py_DECREF(codeObject);
     } else {
       Py_DECREF(codeObject);

@@ -169,8 +169,8 @@ namespace ShootBlues {
             RunningProcessesChanged.Set();
         }
 
-        public static IEnumerator<object> SendModule (ProcessInfo pi, string scriptFilename) {
-            yield return Future.RunInThread(() =>
+        public static IFuture SendModule (ProcessInfo pi, string scriptFilename) {
+            return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.AddModule,
                     ModuleName = Path.GetFileNameWithoutExtension(scriptFilename),
@@ -178,8 +178,8 @@ namespace ShootBlues {
                 }));
         }
 
-        public static IEnumerator<object> ReloadModules (ProcessInfo pi) {
-            yield return Future.RunInThread(() =>
+        public static IFuture ReloadModules (ProcessInfo pi) {
+            return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.ReloadModules
                 }));

@@ -31,12 +31,26 @@ namespace ShootBlues {
         }
 
         public IEnumerator<object> ShowScriptList () {
+            string selectedScript;
+
             while (true) {
+                if (ScriptsList.SelectedItems.Count > 0)
+                    selectedScript = ScriptsList.SelectedItem as string;
+                else
+                    selectedScript = null;
+
                 ScriptsList.BeginUpdate();
                 ScriptsList.Items.Clear();
                 foreach (var script in Program.Scripts)
                     ScriptsList.Items.Add(script);
+                try {
+                    ScriptsList.SelectedItem = selectedScript;
+                } catch {
+                    ScriptsList.SelectedItem = null;
+                }
                 ScriptsList.EndUpdate();
+
+                UnloadScriptButton.Enabled = (ScriptsList.SelectedItem != null);
 
                 yield return Program.ScriptsChanged.Wait();
             }
@@ -75,8 +89,7 @@ namespace ShootBlues {
                 if (dialog.ShowDialog() != DialogResult.OK)
                     return;
 
-                Program.Scripts.Add(dialog.FileName);
-                Program.ScriptsChanged.Set();
+                Start(AddScripts(new string[] { dialog.FileName }));
             }
         }
 
@@ -96,14 +109,57 @@ namespace ShootBlues {
                 if (files == null)
                     return;
 
-                foreach (var file in files) {
-                    if (Path.GetExtension(file).ToLower() != ".py")
-                        continue;
+                Start(AddScripts(
+                    from file in files where Path.GetExtension(file).ToLower() == ".py" select file
+                ));
+            }
+        }
 
-                    Program.Scripts.Add(file);
-                }
+        private IEnumerator<object> AddScripts (IEnumerable<string> filenames) {
+            foreach (var filename in filenames)
+                Program.Scripts.Add(filename);
+            Program.ScriptsChanged.Set();
 
-                Program.ScriptsChanged.Set();
+            foreach (var pi in Program.RunningProcesses) {
+                foreach (var filename in filenames)
+                    yield return Program.SendModule(pi, filename);
+
+                yield return Program.ReloadModules(pi);
+            }
+        }
+
+        private void ReloadAllButton_Click (object sender, EventArgs e) {
+            Start(ReloadAllScripts());
+        }
+
+        private IEnumerator<object> ReloadAllScripts () {
+            foreach (var pi in Program.RunningProcesses) {
+                foreach (var script in Program.Scripts)
+                    yield return Program.SendModule(pi, script);
+
+                yield return Program.ReloadModules(pi);
+            }
+        }
+
+        private void ScriptsList_SelectedIndexChanged (object sender, EventArgs e) {
+            UnloadScriptButton.Enabled = (ScriptsList.SelectedItem != null);
+        }
+
+        private void UnloadScriptButton_Click (object sender, EventArgs e) {
+            Start(RemoveScript(ScriptsList.SelectedItem as string));
+        }
+
+        private IEnumerator<object> RemoveScript (string filename) {
+            Program.Scripts.Remove(filename);
+            Program.ScriptsChanged.Set();
+
+            foreach (var pi in Program.RunningProcesses) {
+                pi.Channel.Send(new RPCMessage {
+                    Type = RPCMessageType.RemoveModule,
+                    ModuleName = Path.GetFileNameWithoutExtension(filename)
+                });
+
+                yield return Program.ReloadModules(pi);
             }
         }
     }

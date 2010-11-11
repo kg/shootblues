@@ -29,10 +29,10 @@
             this.RunningProcessList = new System.Windows.Forms.ListBox();
             this.Tabs = new System.Windows.Forms.TabControl();
             this.ScriptsPage = new System.Windows.Forms.TabPage();
+            this.ScriptsList = new System.Windows.Forms.ListBox();
             this.ReloadAllButton = new System.Windows.Forms.Button();
             this.UnloadScriptButton = new System.Windows.Forms.Button();
             this.LoadScriptButton = new System.Windows.Forms.Button();
-            this.ScriptsList = new System.Windows.Forms.ListView();
             this.ImageList = new System.Windows.Forms.ImageList(this.components);
             this.ProcessMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.RunPythonMenu = new System.Windows.Forms.ToolStripMenuItem();
@@ -85,10 +85,10 @@
             // 
             // ScriptsPage
             // 
+            this.ScriptsPage.Controls.Add(this.ScriptsList);
             this.ScriptsPage.Controls.Add(this.ReloadAllButton);
             this.ScriptsPage.Controls.Add(this.UnloadScriptButton);
             this.ScriptsPage.Controls.Add(this.LoadScriptButton);
-            this.ScriptsPage.Controls.Add(this.ScriptsList);
             this.ScriptsPage.ImageKey = "script.png";
             this.ScriptsPage.Location = new System.Drawing.Point(4, 25);
             this.ScriptsPage.Name = "ScriptsPage";
@@ -97,6 +97,24 @@
             this.ScriptsPage.TabIndex = 0;
             this.ScriptsPage.Text = "Scripts";
             this.ScriptsPage.UseVisualStyleBackColor = true;
+            // 
+            // ScriptsList
+            // 
+            this.ScriptsList.AllowDrop = true;
+            this.ScriptsList.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+                        | System.Windows.Forms.AnchorStyles.Left)
+                        | System.Windows.Forms.AnchorStyles.Right)));
+            this.ScriptsList.FormattingEnabled = true;
+            this.ScriptsList.IntegralHeight = false;
+            this.ScriptsList.ItemHeight = 16;
+            this.ScriptsList.Location = new System.Drawing.Point(6, 6);
+            this.ScriptsList.Name = "ScriptsList";
+            this.ScriptsList.Size = new System.Drawing.Size(413, 234);
+            this.ScriptsList.Sorted = true;
+            this.ScriptsList.TabIndex = 0;
+            this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
+            this.ScriptsList.SelectedIndexChanged += new System.EventHandler(this.ScriptsList_SelectedIndexChanged);
+            this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
             // 
             // ReloadAllButton
             // 
@@ -109,9 +127,11 @@
             this.ReloadAllButton.Text = "&Reload All";
             this.ReloadAllButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.ReloadAllButton.UseVisualStyleBackColor = true;
+            this.ReloadAllButton.Click += new System.EventHandler(this.ReloadAllButton_Click);
             // 
             // UnloadScriptButton
             // 
+            this.UnloadScriptButton.Enabled = false;
             this.UnloadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("UnloadScriptButton.Image")));
             this.UnloadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.UnloadScriptButton.Location = new System.Drawing.Point(137, 252);
@@ -121,6 +141,7 @@
             this.UnloadScriptButton.Text = "&Unload Script";
             this.UnloadScriptButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.UnloadScriptButton.UseVisualStyleBackColor = true;
+            this.UnloadScriptButton.Click += new System.EventHandler(this.UnloadScriptButton_Click);
             // 
             // LoadScriptButton
             // 
@@ -134,25 +155,6 @@
             this.LoadScriptButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.LoadScriptButton.UseVisualStyleBackColor = true;
             this.LoadScriptButton.Click += new System.EventHandler(this.LoadScriptButton_Click);
-            // 
-            // ScriptsList
-            // 
-            this.ScriptsList.AllowDrop = true;
-            this.ScriptsList.FullRowSelect = true;
-            this.ScriptsList.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.None;
-            this.ScriptsList.HideSelection = false;
-            this.ScriptsList.Location = new System.Drawing.Point(6, 6);
-            this.ScriptsList.MultiSelect = false;
-            this.ScriptsList.Name = "ScriptsList";
-            this.ScriptsList.ShowGroups = false;
-            this.ScriptsList.ShowItemToolTips = true;
-            this.ScriptsList.Size = new System.Drawing.Size(414, 240);
-            this.ScriptsList.Sorting = System.Windows.Forms.SortOrder.Ascending;
-            this.ScriptsList.TabIndex = 0;
-            this.ScriptsList.UseCompatibleStateImageBehavior = false;
-            this.ScriptsList.View = System.Windows.Forms.View.List;
-            this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
-            this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
             // 
             // ImageList
             // 
@@ -203,12 +205,12 @@
         private System.Windows.Forms.TabControl Tabs;
         private System.Windows.Forms.TabPage ScriptsPage;
         private System.Windows.Forms.Button LoadScriptButton;
-        private System.Windows.Forms.ListView ScriptsList;
         private System.Windows.Forms.Button ReloadAllButton;
         private System.Windows.Forms.Button UnloadScriptButton;
         private System.Windows.Forms.ImageList ImageList;
         private System.Windows.Forms.ContextMenuStrip ProcessMenu;
         private System.Windows.Forms.ToolStripMenuItem RunPythonMenu;
+        private System.Windows.Forms.ListBox ScriptsList;
     }
 }
 
