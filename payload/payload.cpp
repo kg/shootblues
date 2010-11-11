@@ -24,45 +24,9 @@ static PyObject * g_excException;
 static PyObject * g_excValueError;
 static PyObject * g_excImportError;
 static PyObject * g_sysModule;
+static PyObject * g_tracebackModule;
 static PyObject * g_module;
 static PyObject * g_moduleDict;
-
-void runString (const char * script) {
-  PyCodeObject * codeObject = (PyCodeObject *)Py_CompileStringFlags(
-    script, "shootblues", Py_file_input, 0
-  );
-
-  if (codeObject) {
-    PyObject * module = PyImport_AddModule("__main__");
-    if (module != NULL) {
-      PyObject * globals = PyModule_GetDict(module);
-      PyObject * result = PyEval_EvalCode(codeObject, globals, globals);
-
-      if (result == NULL) {
-        PyErr_Print();
-      } else {
-        Py_DECREF(result);
-        PyErr_Clear();
-      }
-    } 
-
-    Py_DECREF(codeObject);
-  } else {
-    PyErr_Print();
-  }
-}
-
-PyObject * run (PyObject * self, PyObject * args) {
-  const char * script;
-  if (!PyArg_ParseTuple(args, "s", &script)) {
-    PyErr_SetString(g_excValueError, "run requires a script string as its only argument");
-    return NULL;
-  }
-
-  runString(script);
-
-  return Py_BuildValue("");
-}
 
 PyObject * rpcSend (PyObject * self, PyObject * args) {
     const char *messageBody;
@@ -88,6 +52,84 @@ PyObject * rpcSend (PyObject * self, PyObject * args) {
 
     PyErr_SetFromWindowsErr(GetLastError());
     return NULL;
+}
+
+void errorHandler (const char * context) {
+  if (PyErr_Occurred()) {
+    PyObject *errType = 0, *errValue = 0, *traceback = 0;
+    PyErr_Fetch(&errType, &errValue, &traceback);
+    if (!errType)
+      errType = Py_BuildValue("");
+    if (!errValue)
+      errValue = Py_BuildValue("");
+    if (!traceback)
+      traceback = Py_BuildValue("");
+    PyObject * format_exception = PyObject_GetAttrString(g_tracebackModule, "format_exception");
+    PyObject * args = PyTuple_Pack(3, errType, errValue, traceback);
+    PyObject * exception = PyObject_CallObject(format_exception, args);
+    if (exception) {
+      if (context) {
+        PyObject * contextObj = PyString_FromString(context);
+        PyList_Append(exception, contextObj);
+        Py_DECREF(contextObj);
+      }
+
+      PyObject * separator = PyString_FromString("");
+      PyObject * exceptionString = _PyString_Join(separator, exception);
+      Py_DECREF(separator);
+      Py_DECREF(exception);
+      if (exceptionString) {
+        Py_DECREF(args);
+        args = PyTuple_Pack(1, exceptionString);
+        PyObject * result = rpcSend(0, args);
+        if (result)
+          Py_DECREF(result);
+        Py_DECREF(exceptionString);
+      }
+    }
+    Py_DECREF(args);
+    Py_DECREF(format_exception);
+    if (errType)
+      Py_DECREF(errType);
+    if (errValue)
+      Py_DECREF(errValue);
+    if (traceback)
+      Py_DECREF(traceback);
+    PyErr_Clear();
+  }
+}
+
+void runString (const char * script) {
+  PyCodeObject * codeObject = (PyCodeObject *)Py_CompileStringFlags(
+    script, "shootblues", Py_file_input, 0
+  );
+
+  if (codeObject) {
+    PyObject * module = PyImport_AddModule("__main__");
+    if (module != NULL) {
+      PyObject * globals = PyModule_GetDict(module);
+      PyObject * result = PyEval_EvalCode(codeObject, globals, globals);
+
+      if (result != NULL) {
+        Py_DECREF(result);
+        errorHandler("in runString");
+      }
+    } 
+
+    Py_DECREF(codeObject);
+  }
+}
+
+PyObject * run (PyObject * self, PyObject * args) {
+  const char * script;
+  if (!PyArg_ParseTuple(args, "s", &script)) {
+    PyErr_SetString(g_excValueError, "run requires a script string as its only argument");
+    return NULL;
+  }
+
+  runString(script);
+
+  return Py_BuildValue("");
 }
 
 int addModuleString (const char * moduleName, const char * script) {
@@ -138,8 +180,10 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
   while (PyObject * name = PyIter_Next(iter)) {
     PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
 
-    PyMapping_DelItem(sysModules, fullname);
-    PyObject_DelAttr(g_module, name);
+    if (PyMapping_HasKey(sysModules, fullname))
+      PyMapping_DelItem(sysModules, fullname);
+    if (PyObject_HasAttr(g_module, name))
+      PyObject_DelAttr(g_module, name);
 
     Py_DECREF(fullname);
     Py_DECREF(name);
@@ -157,7 +201,7 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
     if (module)
       Py_DECREF(module);
     else
-      PyErr_Print();
+      errorHandler(PyString_AsString(fullname));
 
     Py_DECREF(fullname);
     Py_DECREF(name);
@@ -281,6 +325,8 @@ DWORD __stdcall payload (HWND rpcWindow) {
   PyList_Append(metaPath, g_module);
   Py_DECREF(metaPath);
 
+  g_tracebackModule = PyImport_ImportModule("traceback");
+
   PyGILState_Release(gil);
 
   // Post a null message to alert the parent process that we are alive and ready for messages
@@ -311,6 +357,8 @@ DWORD __stdcall payload (HWND rpcWindow) {
         reloadModules(0, 0);
         break;
     }
+
+    errorHandler("in main loop");
 
     PyGILState_Release(gil);
 

@@ -78,12 +78,12 @@ namespace ShootBlues {
             using (var pw = new ProcessWatcher("python.exe")) {
                 trayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
 
-                ProcessEventArgs evt = null;
+                Process newProcess = null;
                 while (true) {
-                    yield return pw.Events.Dequeue().Bind(() => evt);
+                    yield return pw.NewProcesses.Dequeue().Bind(() => newProcess);
 
                     yield return new Start(
-                        ProcessTask(evt.Process), TaskExecutionPolicy.RunAsBackgroundTask
+                        ProcessTask(newProcess), TaskExecutionPolicy.RunAsBackgroundTask
                     );
                 }
             }
@@ -98,6 +98,7 @@ namespace ShootBlues {
 
             using (StatusWindowInstance = new StatusWindow(Scheduler))
                 yield return StatusWindowInstance.Show();
+            StatusWindowInstance = null;
         }
 
         public static IEnumerator<object> ProcessTask (Process process) {
@@ -190,8 +191,8 @@ namespace ShootBlues {
                 var fMessage = pi.Channel.Receive();
                 yield return fMessage;
 
-                pi.Status = Encoding.ASCII.GetString(fMessage.Result);
-                RunningProcessesChanged.Set();
+                var errorText = Encoding.ASCII.GetString(fMessage.Result);
+                MessageBox.Show(errorText, String.Format("Error in process {0}", pi.Process.Id));
             }
         }
     }

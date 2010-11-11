@@ -5,15 +5,11 @@ using System.Text;
 using System.Management;
 using System.Diagnostics;
 using Squared.Task;
+using System.IO;
 
 namespace ShootBlues {
-    public class ProcessEventArgs : EventArgs {
-        public int ProcessId;
-        public Process Process;
-    }
-
     public class ProcessWatcher : IDisposable {
-        public BlockingQueue<ProcessEventArgs> Events = new BlockingQueue<ProcessEventArgs>();
+        public BlockingQueue<Process> NewProcesses = new BlockingQueue<Process>();
 
         ManagementEventWatcher Watcher;
 
@@ -26,6 +22,11 @@ namespace ShootBlues {
             Watcher.Options.BlockSize = 1;
             Watcher.EventArrived += new EventArrivedEventHandler(OnEventArrived);
             Watcher.Start();
+
+            foreach (var process in Process.GetProcessesByName(
+                Path.GetFileNameWithoutExtension(processName).ToLower()
+            ))
+                NewProcesses.Enqueue(process);
         }
 
         void OnEventArrived (object sender, EventArrivedEventArgs e) {
@@ -35,7 +36,7 @@ namespace ShootBlues {
             Process process = null;
             process = Process.GetProcessById(pid);
 
-            Events.Enqueue(new ProcessEventArgs { Process = process, ProcessId = pid });
+            NewProcesses.Enqueue(process);
         }
 
         public void Dispose () {
