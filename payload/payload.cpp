@@ -175,41 +175,25 @@ PyObject * loadModule (PyObject * self, PyObject * args) {
   PyObject * sysModules = PyObject_GetAttrString(g_sysModule, "modules");
   if (PyMapping_HasKeyString(sysModules, moduleName)) {
     PyObject * result = PyMapping_GetItemString(sysModules, moduleName);
-    Py_DECREF(sysModules);
     return result;
   }
 
-  PyCodeObject * codeObject = (PyCodeObject *)Py_CompileStringFlags(
+  PyObject * codeObject = Py_CompileStringFlags(
     PyString_AsString(scriptText), moduleName + 11, Py_file_input, 0
   );
 
   if (codeObject) {
-    PyObject * module = PyImport_AddModule(moduleName);
+    PyObject * module = PyImport_ExecCodeModuleEx(moduleName, codeObject, moduleName + 11);
+
     if (module != NULL) {
-      PyObject_SetAttrString(module, "__file__", PyString_FromString(moduleName + 11));
-      PyObject_SetAttrString(module, "__name__", PyString_FromString(moduleName + 11));
       PyObject_SetAttrString(module, "__loader__", g_module);
 
-      PyObject_SetAttrString(g_module, moduleName + 11, module);
+      // PyObject_SetAttrString(g_module, moduleName + 11, module);
 
-      PyMapping_SetItemString(sysModules, moduleName, module);
-      Py_DECREF(sysModules);
-
-      PyObject * globals = PyModule_GetDict(module);
-      PyObject * result = PyEval_EvalCode(codeObject, globals, globals);
-
-      if (result == NULL) {
-        Py_DECREF(sysModules);
-        Py_DECREF(codeObject);
-        return NULL;
-      } else {
-        Py_DECREF(codeObject);
-        Py_DECREF(result);
-      }
-    } else {
-      Py_DECREF(sysModules);
+      // PyMapping_SetItemString(sysModules, moduleName, module);
       Py_DECREF(codeObject);
-      PyErr_SetString(g_excImportError, "Unable to create module object");
+    } else {
+      Py_DECREF(codeObject);
       return NULL;
     }
 

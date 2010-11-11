@@ -19,6 +19,7 @@ namespace ShootBlues {
     }
 
     static class Program {
+        public static StatusWindow StatusWindowInstance = null;
         public static Signal RunningProcessesChanged = new Signal();
         public static Signal ScriptsChanged = new Signal();
         public static HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
@@ -89,14 +90,14 @@ namespace ShootBlues {
         }
 
         public static IEnumerator<object> ShowStatusWindow () {
-            var f = new SignalFuture();
-            using (var window = new StatusWindow()) {
-                window.FormClosed += (s, e) => f.Complete();
-
-                window.Show();
-                using (Scheduler.Start(window.ShowProcessList(), TaskExecutionPolicy.RunWhileFutureLives))
-                    yield return f;
+            if (StatusWindowInstance != null) {
+                StatusWindowInstance.Activate();
+                StatusWindowInstance.Focus();
+                yield break;
             }
+
+            using (StatusWindowInstance = new StatusWindow(Scheduler))
+                yield return StatusWindowInstance.Show();
         }
 
         public static IEnumerator<object> ProcessTask (Process process) {

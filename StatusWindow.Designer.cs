@@ -133,14 +133,26 @@
             this.LoadScriptButton.Text = "&Load Script...";
             this.LoadScriptButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.LoadScriptButton.UseVisualStyleBackColor = true;
+            this.LoadScriptButton.Click += new System.EventHandler(this.LoadScriptButton_Click);
             // 
             // ScriptsList
             // 
+            this.ScriptsList.AllowDrop = true;
+            this.ScriptsList.FullRowSelect = true;
+            this.ScriptsList.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.None;
+            this.ScriptsList.HideSelection = false;
             this.ScriptsList.Location = new System.Drawing.Point(6, 6);
+            this.ScriptsList.MultiSelect = false;
             this.ScriptsList.Name = "ScriptsList";
+            this.ScriptsList.ShowGroups = false;
+            this.ScriptsList.ShowItemToolTips = true;
             this.ScriptsList.Size = new System.Drawing.Size(414, 240);
+            this.ScriptsList.Sorting = System.Windows.Forms.SortOrder.Ascending;
             this.ScriptsList.TabIndex = 0;
             this.ScriptsList.UseCompatibleStateImageBehavior = false;
+            this.ScriptsList.View = System.Windows.Forms.View.List;
+            this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
+            this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
             // 
             // ImageList
             // 
@@ -175,6 +187,7 @@
             this.Name = "StatusWindow";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Shoot Blues $version";
+            this.Shown += new System.EventHandler(this.StatusWindow_Shown);
             this.RunningProcessGroupBox.ResumeLayout(false);
             this.Tabs.ResumeLayout(false);
             this.ScriptsPage.ResumeLayout(false);
