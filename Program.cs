@@ -5,6 +5,7 @@ using System.Reflection;
 using Squared.Task;
 using System.Diagnostics;
 using System.Text;
+using System.IO;
 
 namespace ShootBlues {
     public class ProcessInfo {
@@ -19,7 +20,9 @@ namespace ShootBlues {
 
     static class Program {
         public static Signal RunningProcessesChanged = new Signal();
+        public static Signal ScriptsChanged = new Signal();
         public static HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
+        public static HashSet<string> Scripts = new HashSet<string>();
         public static TaskScheduler Scheduler;
         public static int ExitCode = 0;
 
@@ -137,6 +140,18 @@ namespace ShootBlues {
                     pi.Status = "Payload injected";
                     RunningProcessesChanged.Set();
 
+                    yield return pi.Channel.Receive();
+                    pi.Status = "Loading scripts...";
+                    RunningProcessesChanged.Set();
+
+                    foreach (var script in Scripts)
+                        yield return SendModule(pi, script);
+
+                    yield return ReloadModules(pi);
+
+                    pi.Status = "Scripts loaded";
+                    RunningProcessesChanged.Set();
+
                     var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
 
                     using (fRpcTask)
@@ -153,15 +168,23 @@ namespace ShootBlues {
             RunningProcessesChanged.Set();
         }
 
+        public static IEnumerator<object> SendModule (ProcessInfo pi, string scriptFilename) {
+            yield return Future.RunInThread(() =>
+                pi.Channel.Send(new RPCMessage {
+                    Type = RPCMessageType.AddModule,
+                    ModuleName = Path.GetFileNameWithoutExtension(scriptFilename),
+                    Text = File.ReadAllText(scriptFilename)
+                }));
+        }
+
+        public static IEnumerator<object> ReloadModules (ProcessInfo pi) {
+            yield return Future.RunInThread(() =>
+                pi.Channel.Send(new RPCMessage {
+                    Type = RPCMessageType.ReloadModules
+                }));
+        }
+
         public static IEnumerator<object> RPCTask (ProcessInfo pi) {
-            yield return pi.Channel.Receive();
-            pi.Status = "RPC channel open";
-            RunningProcessesChanged.Set();
-
-            yield return Future.RunInThread(
-                () => pi.Channel.Send(Encoding.ASCII.GetBytes("print 'Hello from Shoot Blues!'\0"))
-            );
-
             while (true) {
                 var fMessage = pi.Channel.Receive();
                 yield return fMessage;

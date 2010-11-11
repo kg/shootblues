@@ -32,7 +32,10 @@ namespace ShootBlues {
 
             using (var dialog = new EnterPythonDialog())
                 if (dialog.ShowDialog(this) == DialogResult.OK)
-                    process.Channel.Send(Encoding.ASCII.GetBytes(dialog.PythonText.Text));
+                    process.Channel.Send(new RPCMessage {
+                        Type = RPCMessageType.Run,
+                        Text = dialog.PythonText.Text
+                    });
         }
 
         private void RunningProcessList_MouseDown (object sender, MouseEventArgs e) {

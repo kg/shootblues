@@ -29,10 +29,10 @@
             this.RunningProcessList = new System.Windows.Forms.ListBox();
             this.Tabs = new System.Windows.Forms.TabControl();
             this.ScriptsPage = new System.Windows.Forms.TabPage();
-            this.button3 = new System.Windows.Forms.Button();
-            this.button2 = new System.Windows.Forms.Button();
-            this.button1 = new System.Windows.Forms.Button();
-            this.listView1 = new System.Windows.Forms.ListView();
+            this.ReloadAllButton = new System.Windows.Forms.Button();
+            this.UnloadScriptButton = new System.Windows.Forms.Button();
+            this.LoadScriptButton = new System.Windows.Forms.Button();
+            this.ScriptsList = new System.Windows.Forms.ListView();
             this.ImageList = new System.Windows.Forms.ImageList(this.components);
             this.ProcessMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.RunPythonMenu = new System.Windows.Forms.ToolStripMenuItem();
@@ -85,10 +85,10 @@
             // 
             // ScriptsPage
             // 
-            this.ScriptsPage.Controls.Add(this.button3);
-            this.ScriptsPage.Controls.Add(this.button2);
-            this.ScriptsPage.Controls.Add(this.button1);
-            this.ScriptsPage.Controls.Add(this.listView1);
+            this.ScriptsPage.Controls.Add(this.ReloadAllButton);
+            this.ScriptsPage.Controls.Add(this.UnloadScriptButton);
+            this.ScriptsPage.Controls.Add(this.LoadScriptButton);
+            this.ScriptsPage.Controls.Add(this.ScriptsList);
             this.ScriptsPage.ImageKey = "script.png";
             this.ScriptsPage.Location = new System.Drawing.Point(4, 25);
             this.ScriptsPage.Name = "ScriptsPage";
@@ -98,52 +98,49 @@
             this.ScriptsPage.Text = "Scripts";
             this.ScriptsPage.UseVisualStyleBackColor = true;
             // 
-            // button3
+            // ReloadAllButton
             // 
-            this.button3.Enabled = false;
-            this.button3.Image = ((System.Drawing.Image)(resources.GetObject("button3.Image")));
-            this.button3.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.button3.Location = new System.Drawing.Point(320, 252);
-            this.button3.Name = "button3";
-            this.button3.Size = new System.Drawing.Size(100, 27);
-            this.button3.TabIndex = 3;
-            this.button3.Text = "&Reload All";
-            this.button3.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.button3.UseVisualStyleBackColor = true;
+            this.ReloadAllButton.Image = ((System.Drawing.Image)(resources.GetObject("ReloadAllButton.Image")));
+            this.ReloadAllButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.ReloadAllButton.Location = new System.Drawing.Point(320, 252);
+            this.ReloadAllButton.Name = "ReloadAllButton";
+            this.ReloadAllButton.Size = new System.Drawing.Size(100, 27);
+            this.ReloadAllButton.TabIndex = 3;
+            this.ReloadAllButton.Text = "&Reload All";
+            this.ReloadAllButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.ReloadAllButton.UseVisualStyleBackColor = true;
             // 
-            // button2
+            // UnloadScriptButton
             // 
-            this.button2.Enabled = false;
-            this.button2.Image = ((System.Drawing.Image)(resources.GetObject("button2.Image")));
-            this.button2.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.button2.Location = new System.Drawing.Point(137, 252);
-            this.button2.Name = "button2";
-            this.button2.Size = new System.Drawing.Size(125, 27);
-            this.button2.TabIndex = 2;
-            this.button2.Text = "&Unload Script";
-            this.button2.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.button2.UseVisualStyleBackColor = true;
+            this.UnloadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("UnloadScriptButton.Image")));
+            this.UnloadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.UnloadScriptButton.Location = new System.Drawing.Point(137, 252);
+            this.UnloadScriptButton.Name = "UnloadScriptButton";
+            this.UnloadScriptButton.Size = new System.Drawing.Size(125, 27);
+            this.UnloadScriptButton.TabIndex = 2;
+            this.UnloadScriptButton.Text = "&Unload Script";
+            this.UnloadScriptButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.UnloadScriptButton.UseVisualStyleBackColor = true;
             // 
-            // button1
+            // LoadScriptButton
             // 
-            this.button1.Enabled = false;
-            this.button1.Image = ((System.Drawing.Image)(resources.GetObject("button1.Image")));
-            this.button1.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.button1.Location = new System.Drawing.Point(6, 252);
-            this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(125, 27);
-            this.button1.TabIndex = 1;
-            this.button1.Text = "&Load Script...";
-            this.button1.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.button1.UseVisualStyleBackColor = true;
+            this.LoadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("LoadScriptButton.Image")));
+            this.LoadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.LoadScriptButton.Location = new System.Drawing.Point(6, 252);
+            this.LoadScriptButton.Name = "LoadScriptButton";
+            this.LoadScriptButton.Size = new System.Drawing.Size(125, 27);
+            this.LoadScriptButton.TabIndex = 1;
+            this.LoadScriptButton.Text = "&Load Script...";
+            this.LoadScriptButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.LoadScriptButton.UseVisualStyleBackColor = true;
             // 
-            // listView1
+            // ScriptsList
             // 
-            this.listView1.Location = new System.Drawing.Point(6, 6);
-            this.listView1.Name = "listView1";
-            this.listView1.Size = new System.Drawing.Size(414, 240);
-            this.listView1.TabIndex = 0;
-            this.listView1.UseCompatibleStateImageBehavior = false;
+            this.ScriptsList.Location = new System.Drawing.Point(6, 6);
+            this.ScriptsList.Name = "ScriptsList";
+            this.ScriptsList.Size = new System.Drawing.Size(414, 240);
+            this.ScriptsList.TabIndex = 0;
+            this.ScriptsList.UseCompatibleStateImageBehavior = false;
             // 
             // ImageList
             // 
@@ -161,7 +158,7 @@
             // RunPythonMenu
             // 
             this.RunPythonMenu.Name = "RunPythonMenu";
-            this.RunPythonMenu.Size = new System.Drawing.Size(152, 22);
+            this.RunPythonMenu.Size = new System.Drawing.Size(145, 22);
             this.RunPythonMenu.Text = "&Run Python...";
             this.RunPythonMenu.Click += new System.EventHandler(this.RunPythonMenu_Click);
             // 
@@ -192,10 +189,10 @@
         private System.Windows.Forms.ListBox RunningProcessList;
         private System.Windows.Forms.TabControl Tabs;
         private System.Windows.Forms.TabPage ScriptsPage;
-        private System.Windows.Forms.Button button1;
-        private System.Windows.Forms.ListView listView1;
-        private System.Windows.Forms.Button button3;
-        private System.Windows.Forms.Button button2;
+        private System.Windows.Forms.Button LoadScriptButton;
+        private System.Windows.Forms.ListView ScriptsList;
+        private System.Windows.Forms.Button ReloadAllButton;
+        private System.Windows.Forms.Button UnloadScriptButton;
         private System.Windows.Forms.ImageList ImageList;
         private System.Windows.Forms.ContextMenuStrip ProcessMenu;
         private System.Windows.Forms.ToolStripMenuItem RunPythonMenu;
