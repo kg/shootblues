@@ -173,10 +173,33 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
   while (PyObject * name = PyIter_Next(iter)) {
     PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
 
-    if (PyMapping_HasKey(sysModules, fullname))
+    PyObject * existingModule = 0;
+
+    if (PyMapping_HasKey(sysModules, fullname)) {
+      existingModule = PyObject_GetItem(sysModules, fullname);
       PyMapping_DelItem(sysModules, fullname);
-    if (PyObject_HasAttr(g_module, name))
+    }
+    if (PyObject_HasAttr(g_module, name)) {
+      if (!existingModule)
+        existingModule = PyObject_GetAttr(g_module, name);
       PyObject_DelAttr(g_module, name);
+    }
+
+    // If the module was previously loaded, try and call its __unload__ handler
+    if (existingModule) {
+      if (PyObject_HasAttrString(existingModule, "__unload__")) {
+        PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
+        PyObject * args = PyTuple_New(0);
+        PyObject * result = PyObject_CallObject(unloadHandler, args);
+        if (!result)
+          errorHandler();
+        else
+          Py_DECREF(result);
+        Py_DECREF(args);
+        Py_DECREF(unloadHandler);
+      }
+      Py_DECREF(existingModule);
+    }
 
     Py_DECREF(fullname);
     Py_DECREF(name);
