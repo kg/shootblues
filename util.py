@@ -20,7 +20,8 @@ def getLoggedInCharacterName():
     except:
         return None
 
-def forceStopService(serviceName, serviceInstance):
+def forceStopService(serviceName):
+    serviceInstance = sm.services[serviceName]
     del sm.services[serviceName]
     
     for event in serviceInstance.__notifyevents__:
@@ -36,7 +37,7 @@ def forceStopService(serviceName, serviceInstance):
 def forceStartService(serviceName, serviceType):
     oldInstance = sm.services.get(serviceName, None)
     if oldInstance:
-        forceStopService(serviceName, oldInstance)
+        forceStopService(serviceName)
     
     result = serviceType()
     sm.services[serviceName] = result

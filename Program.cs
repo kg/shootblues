@@ -52,7 +52,7 @@ namespace ShootBlues {
         }
 
         public static bool OnTaskError (Exception error) {
-            Console.WriteLine("Error in background task: {0}", error.ToString());
+            MessageBox.Show(error.ToString(), "Error in background task");
 
             return true;
         }
