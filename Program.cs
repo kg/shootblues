@@ -20,6 +20,7 @@ namespace ShootBlues {
 
     public static class Program {
         private static StatusWindow StatusWindowInstance = null;
+        private static ContextMenuStrip TrayMenu = null;
         private static int ExitCode = 0;
 
         public static readonly Signal RunningProcessesChanged = new Signal();
@@ -65,20 +66,25 @@ namespace ShootBlues {
         }
 
         private static IEnumerator<object> MainTask () {
-            var trayMenu = new ContextMenuStrip();
-            trayMenu.AddItem("&Status", (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask));
-            trayMenu.Items.Add("-");
-            trayMenu.AddItem("E&xit", (s, e) => Application.Exit());
+            TrayMenu = new ContextMenuStrip();
+            TrayMenu.AddItem("&Status", (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask));
+            TrayMenu.Items.Add("-");
+            TrayMenu.AddItem("E&xit", (s, e) => Application.Exit());
 
-            using (trayMenu)
+            using (TrayMenu)
             using (var trayIcon = new NotifyIcon {
                 Text = "Shoot Blues v" + Application.ProductVersion,
                 Icon = Properties.Resources.icon,
                 Visible = true,
-                ContextMenuStrip = trayMenu
+                ContextMenuStrip = TrayMenu
             })
             using (var pw = new ProcessWatcher("python.exe")) {
                 trayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
+
+                yield return new Start(
+                    ManagedScriptLoaderTask(), 
+                    TaskExecutionPolicy.RunAsBackgroundTask
+                );
 
                 Process newProcess = null;
                 while (true) {
@@ -91,6 +97,18 @@ namespace ShootBlues {
             }
         }
 
+        public static void AddCustomMenu (ToolStripMenuItem menu) {
+            if (TrayMenu.Items.Count == 3)
+                TrayMenu.Items.Insert(1, new ToolStripSeparator());
+            TrayMenu.Items.Insert(TrayMenu.Items.Count - 2, menu);
+        }
+
+        public static void RemoveCustomMenu (ToolStripMenuItem menu) {
+            TrayMenu.Items.Remove(menu);
+            if (TrayMenu.Items.Count == 4)
+                TrayMenu.Items.RemoveAt(1);
+        }
+
         public static IEnumerator<object> ShowStatusWindow () {
             if (StatusWindowInstance != null) {
                 StatusWindowInstance.Activate();
@@ -98,9 +116,26 @@ namespace ShootBlues {
                 yield break;
             }
 
-            using (StatusWindowInstance = new StatusWindow(Scheduler))
+            using (StatusWindowInstance = new StatusWindow(Scheduler)) {
+                foreach (var instance in ManagedScripts.Values)
+                    yield return instance.OnStatusWindowShown(StatusWindowInstance);
+
                 yield return StatusWindowInstance.Show();
+            }
+
             StatusWindowInstance = null;
+        }
+
+        private static IEnumerator<object> ManagedScriptLoaderTask () {
+            while (true) {
+                yield return ScriptsChanged.Wait();
+
+                foreach (var script in Scripts)
+                    if (!ManagedScripts.ContainsKey(script))
+                        yield return LoadManagedScript(script);
+
+                yield return UnloadDeadManagedScripts();
+            }
         }
 
         private static IEnumerator<object> ProcessTask (Process process) {
@@ -191,6 +226,9 @@ namespace ShootBlues {
 
                 ManagedScripts[scriptFilename] = instance;
 
+                if (StatusWindowInstance != null)
+                    yield return instance.OnStatusWindowShown(StatusWindowInstance);
+
                 break;
             }
         }
@@ -248,17 +286,25 @@ namespace ShootBlues {
             }
         }
 
-        public static IFuture ReloadModules (ProcessInfo pi) {
+        public static IEnumerator<object> UnloadDeadManagedScripts () {
             var keys = new string[ManagedScripts.Count];
             ManagedScripts.Keys.CopyTo(keys, 0);
+
             foreach (var key in keys) {
                 if (!Scripts.Contains(key)) {
+                    if (StatusWindowInstance != null)
+                        yield return ManagedScripts[key].OnStatusWindowHidden(StatusWindowInstance);
+
                     ManagedScripts[key].Dispose();
                     ManagedScripts.Remove(key);
                 }
             }
+        }
 
-            return Future.RunInThread(() =>
+        public static IEnumerator<object> ReloadModules (ProcessInfo pi) {
+            yield return UnloadDeadManagedScripts();
+
+            yield return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.ReloadModules
                 }));

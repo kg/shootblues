@@ -51,7 +51,7 @@
             this.RunningProcessGroupBox.Font = new System.Drawing.Font("MS Reference Sans Serif", 9.75F);
             this.RunningProcessGroupBox.Location = new System.Drawing.Point(2, 2);
             this.RunningProcessGroupBox.Name = "RunningProcessGroupBox";
-            this.RunningProcessGroupBox.Size = new System.Drawing.Size(433, 90);
+            this.RunningProcessGroupBox.Size = new System.Drawing.Size(480, 90);
             this.RunningProcessGroupBox.TabIndex = 0;
             this.RunningProcessGroupBox.TabStop = false;
             this.RunningProcessGroupBox.Text = "Running Processes";
@@ -67,7 +67,7 @@
             this.RunningProcessList.ItemHeight = 16;
             this.RunningProcessList.Location = new System.Drawing.Point(6, 19);
             this.RunningProcessList.Name = "RunningProcessList";
-            this.RunningProcessList.Size = new System.Drawing.Size(421, 64);
+            this.RunningProcessList.Size = new System.Drawing.Size(468, 64);
             this.RunningProcessList.TabIndex = 0;
             this.RunningProcessList.MouseDown += new System.Windows.Forms.MouseEventHandler(this.RunningProcessList_MouseDown);
             // 
@@ -81,7 +81,7 @@
             this.Tabs.Location = new System.Drawing.Point(2, 98);
             this.Tabs.Name = "Tabs";
             this.Tabs.SelectedIndex = 0;
-            this.Tabs.Size = new System.Drawing.Size(435, 315);
+            this.Tabs.Size = new System.Drawing.Size(482, 313);
             this.Tabs.TabIndex = 1;
             // 
             // ScriptsPage
@@ -94,7 +94,7 @@
             this.ScriptsPage.Location = new System.Drawing.Point(4, 25);
             this.ScriptsPage.Name = "ScriptsPage";
             this.ScriptsPage.Padding = new System.Windows.Forms.Padding(3);
-            this.ScriptsPage.Size = new System.Drawing.Size(427, 286);
+            this.ScriptsPage.Size = new System.Drawing.Size(474, 284);
             this.ScriptsPage.TabIndex = 0;
             this.ScriptsPage.Text = "Scripts";
             this.ScriptsPage.UseVisualStyleBackColor = true;
@@ -110,7 +110,7 @@
             this.ScriptsList.ItemHeight = 16;
             this.ScriptsList.Location = new System.Drawing.Point(6, 6);
             this.ScriptsList.Name = "ScriptsList";
-            this.ScriptsList.Size = new System.Drawing.Size(413, 230);
+            this.ScriptsList.Size = new System.Drawing.Size(460, 236);
             this.ScriptsList.Sorted = true;
             this.ScriptsList.TabIndex = 0;
             this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
@@ -119,9 +119,10 @@
             // 
             // ReloadAllButton
             // 
+            this.ReloadAllButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.ReloadAllButton.Image = ((System.Drawing.Image)(resources.GetObject("ReloadAllButton.Image")));
             this.ReloadAllButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.ReloadAllButton.Location = new System.Drawing.Point(320, 252);
+            this.ReloadAllButton.Location = new System.Drawing.Point(367, 248);
             this.ReloadAllButton.Name = "ReloadAllButton";
             this.ReloadAllButton.Size = new System.Drawing.Size(100, 27);
             this.ReloadAllButton.TabIndex = 3;
@@ -132,10 +133,11 @@
             // 
             // UnloadScriptButton
             // 
+            this.UnloadScriptButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.UnloadScriptButton.Enabled = false;
             this.UnloadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("UnloadScriptButton.Image")));
             this.UnloadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.UnloadScriptButton.Location = new System.Drawing.Point(137, 252);
+            this.UnloadScriptButton.Location = new System.Drawing.Point(137, 248);
             this.UnloadScriptButton.Name = "UnloadScriptButton";
             this.UnloadScriptButton.Size = new System.Drawing.Size(125, 27);
             this.UnloadScriptButton.TabIndex = 2;
@@ -146,9 +148,10 @@
             // 
             // LoadScriptButton
             // 
+            this.LoadScriptButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.LoadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("LoadScriptButton.Image")));
             this.LoadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.LoadScriptButton.Location = new System.Drawing.Point(6, 252);
+            this.LoadScriptButton.Location = new System.Drawing.Point(6, 248);
             this.LoadScriptButton.Name = "LoadScriptButton";
             this.LoadScriptButton.Size = new System.Drawing.Size(125, 27);
             this.LoadScriptButton.TabIndex = 1;
@@ -180,18 +183,18 @@
             // LoadScriptMenu
             // 
             this.LoadScriptMenu.Name = "LoadScriptMenu";
-            this.LoadScriptMenu.Size = new System.Drawing.Size(153, 26);
+            this.LoadScriptMenu.Size = new System.Drawing.Size(61, 4);
             // 
             // StatusWindow
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
-            this.ClientSize = new System.Drawing.Size(437, 414);
+            this.ClientSize = new System.Drawing.Size(484, 412);
             this.Controls.Add(this.Tabs);
             this.Controls.Add(this.RunningProcessGroupBox);
             this.Font = new System.Drawing.Font("MS Reference Sans Serif", 9.75F);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
+            this.MinimumSize = new System.Drawing.Size(401, 300);
             this.Name = "StatusWindow";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Shoot Blues $version";

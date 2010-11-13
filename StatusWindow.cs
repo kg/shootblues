@@ -9,7 +9,7 @@ using Squared.Task;
 using System.IO;
 
 namespace ShootBlues {
-    public partial class StatusWindow : TaskForm {
+    public partial class StatusWindow : TaskForm, IStatusWindow {
         public StatusWindow (TaskScheduler scheduler)
             : base(scheduler) {
             InitializeComponent();
@@ -181,13 +181,36 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
         private IEnumerator<object> RemoveScript (string filename) {
             Program.Scripts.Remove(filename);
-            Program.ScriptsChanged.Set();
 
             foreach (var pi in Program.RunningProcesses) {
                 yield return Program.UnloadScriptByFilename(pi, filename);
 
                 yield return Program.ReloadModules(pi);
             }
+
+            Program.ScriptsChanged.Set();
+        }
+
+        public TabPage ShowConfigurationPanel (string title, Control panel) {
+            TabPage tabPage = panel as TabPage;
+            if (tabPage == null) {
+                tabPage = new TabPage();
+                tabPage.Controls.Add(panel);
+                panel.Dock = DockStyle.Fill;
+            }
+
+            tabPage.Text = title;
+            tabPage.Name = title;
+            Tabs.TabPages.Add(tabPage);
+            return tabPage;
+        }
+
+        public void HideConfigurationPanel (TabPage page) {
+            Tabs.TabPages.Remove(page);
+        }
+
+        public void HideConfigurationPanel (string title) {
+            Tabs.TabPages.RemoveByKey(title);
         }
     }
 }
