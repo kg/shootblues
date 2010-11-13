@@ -359,8 +359,10 @@ namespace ShootBlues {
                 if (StatusWindowInstance != null)
                     yield return instance.OnStatusWindowShown(StatusWindowInstance);
 
-                break;
+                yield break;
             }
+
+            MessageBox.Show(String.Format("The file '{0}' is not a Shoot Blues script.", script), "Error");
         }
 
         public static IEnumerator<object> LoadScriptFromString (ProcessInfo pi, string moduleName, string scriptText) {
