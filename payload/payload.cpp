@@ -15,6 +15,7 @@ struct RPCMessage {
   RPCMessageType type;
   unsigned int messageId;
   const char * moduleName;
+  const char * functionName;
   const char * text;
 };
 #pragma pack(pop)
@@ -27,9 +28,11 @@ static PyObject * g_excValueError;
 static PyObject * g_excImportError;
 static PyObject * g_sysModule;
 static PyObject * g_tracebackModule;
+static PyObject * g_jsonModule;
 static PyObject * g_module;
 static PyObject * g_moduleDict;
 static PyObject * g_unloadedModules;
+static PyObject * g_typeNamedChannel;
 
 PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
   static char * kwlist[] = {"messageBody", "id", NULL};
@@ -48,9 +51,20 @@ PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
     if (messageBody)
       strcpy((char *)region + sizeof(messageId), messageBody);
 
+    HWND rpcWindow = g_rpcWindow;
+    if (self) {
+      PyObject * rpcWindowObj = PyObject_GetAttrString(self, "__hwnd__");
+      if (rpcWindowObj) {
+        rpcWindow = reinterpret_cast<HWND>(PyLong_AsVoidPtr(rpcWindowObj));
+        Py_DECREF(rpcWindowObj);
+      } else {
+        PyErr_Clear();
+      }
+    }
+
     // Post a message to our parent process (it will free our memory region once it gets the message)
     if (PostMessage(
-      g_rpcWindow, g_rpcMessageId, 
+      rpcWindow, g_rpcMessageId, 
       reinterpret_cast<WPARAM>(region), 
       *reinterpret_cast<LPARAM *>(&regionSize)
     ))
@@ -99,16 +113,33 @@ void errorHandler () {
   PyErr_Clear();
 }
 
-void callFunction (const char * moduleName, const char * functionName, unsigned int messageId) {
+void callFunction (const char * moduleName, const char * functionName, const char * argumentsJson, unsigned int messageId) {
   PyObject * module = PyObject_GetAttrString(g_module, moduleName);
   if (!module)
     return errorHandler();
+
   PyObject * function = PyObject_GetAttrString(module, functionName);
   if (!function) {
     Py_DECREF(module);
     return errorHandler();
   }
-  PyObject * args = PyTuple_New(0);
+
+  PyObject * args;
+  if (!argumentsJson) {
+    args = NULL;
+  } else {
+    PyObject * loads = PyObject_GetAttrString(g_jsonModule, "loads");
+    PyObject * argsString = PyString_FromString(argumentsJson);
+    args = PyTuple_Pack(1, argsString);
+    PyObject * result = PyObject_CallObject(loads, args);
+    Py_DECREF(args);
+    Py_DECREF(argsString);
+    if (!result)
+      return errorHandler();
+    args = PySequence_Tuple(result);
+    Py_DECREF(result);
+  }
+
   PyObject * result = PyObject_CallObject(function, args);
 
   if (result) {
@@ -123,7 +154,7 @@ void callFunction (const char * moduleName, const char * functionName, unsigned 
   } else
     errorHandler();
 
-  Py_DECREF(args);
+  Py_XDECREF(args);
   Py_XDECREF(result);
   Py_DECREF(function);
   Py_DECREF(module);
@@ -232,13 +263,11 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
       if (existingModule) {
         if (PyObject_HasAttrString(existingModule, "__unload__")) {
           PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
-          PyObject * args = PyTuple_New(0);
-          PyObject * result = PyObject_CallObject(unloadHandler, args);
+          PyObject * result = PyObject_CallObject(unloadHandler, NULL);
           if (!result)
             errorHandler();
           else
             Py_DECREF(result);
-          Py_DECREF(args);
           Py_DECREF(unloadHandler);
         }
         Py_DECREF(existingModule);
@@ -340,15 +369,42 @@ PyObject * loadModule (PyObject * self, PyObject * args) {
   }
 }
 
+PyObject * createRpcChannel (PyObject * self, PyObject * args) {
+  unsigned long windowHandle;
+  if (!PyArg_ParseTuple(args, "k", &windowHandle))
+    return NULL;
+
+  HWND hWnd = reinterpret_cast<HWND>(windowHandle);
+  if (!IsWindow(hWnd)) {
+    PyErr_SetString(g_excValueError, "Invalid window handle");
+    return NULL;
+  }
+
+  static PyMethodDef sendMethod = {
+    "send", (PyCFunction)rpcSend, METH_KEYWORDS, "Send an RPC message via the channel."
+  };  
+  
+  PyObject * obj = PyObject_CallObject(g_typeNamedChannel, NULL);
+  PyObject * val = PyLong_FromVoidPtr(hWnd);
+  PyObject_SetAttrString(obj, "__hwnd__", val);
+  Py_DECREF(val);
+  val = PyCFunction_NewEx(&sendMethod, obj, NULL);
+  PyObject_SetAttrString(obj, "send", val);
+  Py_DECREF(val);
+
+  return obj;
+}
+
 static PyMethodDef PythonMethods[] = {
-    {"rpcSend", (PyCFunction)rpcSend, METH_KEYWORDS, "Send an RPC message to the parent process."},
-    {"run", (PyCFunction)run, METH_KEYWORDS, "Compiles and runs a script block."},
-    {"addModule", addModule, METH_VARARGS, "Adds a new script module or replaces an existing script module."},
-    {"removeModule", removeModule, METH_VARARGS, "Removes an existing script module."},
-    {"reloadModules", reloadModules, METH_VARARGS, "Reloads all script modules."},
-    {"find_module", (PyCFunction)findModule, METH_KEYWORDS, "Implements the Finder protocol (PEP 302)."},
-    {"load_module", loadModule, METH_VARARGS, "Implements the Loader protocol (PEP 302)."},
-    {NULL, NULL, 0, NULL}
+  {"rpcSend", (PyCFunction)rpcSend, METH_KEYWORDS, "Send an RPC message to the parent process."},
+  {"run", (PyCFunction)run, METH_KEYWORDS, "Compiles and runs a script block."},
+  {"addModule", addModule, METH_VARARGS, "Adds a new script module or replaces an existing script module."},
+  {"removeModule", removeModule, METH_VARARGS, "Removes an existing script module."},
+  {"reloadModules", reloadModules, METH_VARARGS, "Reloads all script modules."},
+  {"createChannel", createRpcChannel, METH_VARARGS, "Creates an RPC response channel."},
+  {"find_module", (PyCFunction)findModule, METH_KEYWORDS, "Implements the Finder protocol (PEP 302)."},
+  {"load_module", loadModule, METH_VARARGS, "Implements the Loader protocol (PEP 302)."},
+  {NULL, NULL, 0, NULL}
 };
 
 DWORD __stdcall payload (HWND rpcWindow) {
@@ -377,6 +433,11 @@ DWORD __stdcall payload (HWND rpcWindow) {
   PyObject_SetAttrString(g_module, "__file__", PyString_FromString("shootblues"));
   PyObject_SetAttrString(g_module, "__path__", PyString_FromString("shootblues"));
 
+  // Initialize our custom type
+  g_typeNamedChannel = PyClass_New(NULL, PyDict_New(), PyString_FromString("NamedChannel"));
+  PyObject_SetAttrString(g_typeNamedChannel, "__module__", PyString_FromString("shootblues"));
+  PyModule_AddObject(g_module, "NamedChannel", g_typeNamedChannel);
+
   g_moduleDict = PyDict_New();
   PyObject_SetAttrString(g_module, "modules", g_moduleDict);
   g_unloadedModules = PyList_New(0);
@@ -388,6 +449,7 @@ DWORD __stdcall payload (HWND rpcWindow) {
   PyList_Append(metaPath, g_module);
   Py_DECREF(metaPath);
 
+  g_jsonModule = PyImport_ImportModule("json");
   g_tracebackModule = PyImport_ImportModule("traceback");
 
   PyGILState_Release(gil);
@@ -420,7 +482,7 @@ DWORD __stdcall payload (HWND rpcWindow) {
         reloadModules(0, 0);
         break;
       case RMT_CallFunction:
-        callFunction(rpc->moduleName, rpc->text, rpc->messageId);
+        callFunction(rpc->moduleName, rpc->functionName, rpc->text, rpc->messageId);
         break;
     }
 

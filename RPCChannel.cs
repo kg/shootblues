@@ -19,6 +19,7 @@ namespace ShootBlues {
     public struct RPCMessage {
         public RPCMessageType Type;
         public string ModuleName;
+        public string FunctionName;
         public string Text;
     }
 
@@ -27,21 +28,22 @@ namespace ShootBlues {
         public RPCMessageType Type;
         public UInt32 MessageId;
         public UInt32 ModuleName;
+        public UInt32 FunctionName;
         public UInt32 Text;
     }
 
-    public class RPCChannel : NativeWindow, IDisposable {
-        private int WM_RPC_MESSAGE;
+    public class RPCResponseChannel : NativeWindow, IDisposable {
+        protected int WM_RPC_MESSAGE;
         private const int WS_EX_NOACTIVATE = 0x08000000;
 
-        private Process _Process;
-        private Dictionary<UInt32, Future<byte[]>> _AwaitingResponses = new Dictionary<uint, Future<byte[]>>();
-        private BlockingQueue<byte[]> _Messages = new BlockingQueue<byte[]>();
-        private Random _Random = new Random();
+        protected Process _Process;
+        protected Dictionary<UInt32, Future<byte[]>> _AwaitingResponses = new Dictionary<uint, Future<byte[]>>();
+        protected BlockingQueue<byte[]> _Messages = new BlockingQueue<byte[]>();
+        protected Random _Random = new Random();
 
         public UInt32 RemoteThreadId = 0;
 
-        public RPCChannel (Process process) 
+        public RPCResponseChannel (Process process) 
             : base() {
             _Process = process;
 
@@ -114,6 +116,22 @@ namespace ShootBlues {
             return BitConverter.ToUInt32(buf, 0);
         }
 
+        public Future<byte[]> WaitForMessage (UInt32 messageID) {
+            var result = new Future<byte[]>();
+            _AwaitingResponses[messageID] = result;
+            return result;
+        }
+
+        public void Dispose () {
+            DestroyHandle();
+        }
+    }
+
+    public class RPCChannel : RPCResponseChannel {
+        public RPCChannel (Process process)
+            : base(process) {
+        }
+
         private UInt32 TransportStringSize (string text) {
             if (text == null)
                 return 0;
@@ -130,12 +148,6 @@ namespace ShootBlues {
             return (UInt32)(baseAddress.ToInt64() + offset);
         }
 
-        public Future<byte[]> WaitForMessage (UInt32 messageID) {
-            var result = new Future<byte[]>();
-            _AwaitingResponses[messageID] = result;
-            return result;
-        }
-
         public void Send (RPCMessage message) {
             Send(message, false);
         }
@@ -148,6 +160,7 @@ namespace ShootBlues {
 
             UInt32 messageSize = (UInt32)Marshal.SizeOf(typeof(TransportRPCMessage));
             UInt32 moduleNameSize = TransportStringSize(message.ModuleName);
+            UInt32 functionNameSize = TransportStringSize(message.FunctionName);
             UInt32 textSize = TransportStringSize(message.Text);
             Future<byte[]> result = null;
             UInt32 messageID = 0;
@@ -163,7 +176,7 @@ namespace ShootBlues {
             )) {
                 int numBytes;
                 ProcessInjector.RemoteMemoryRegion region;
-                var regionSize = messageSize + moduleNameSize + textSize;
+                var regionSize = messageSize + moduleNameSize + textSize + functionNameSize;
                 var buffer = new byte[regionSize];
 
                 // leaked on purpose
@@ -175,7 +188,8 @@ namespace ShootBlues {
                     Type = message.Type,
                     MessageId = messageID,
                     Text = WriteTransportString(message.Text, buffer, messageSize, region.Address),
-                    ModuleName = WriteTransportString(message.ModuleName, buffer, messageSize + textSize, region.Address)
+                    FunctionName = WriteTransportString(message.FunctionName, buffer, messageSize + textSize, region.Address),
+                    ModuleName = WriteTransportString(message.ModuleName, buffer, messageSize + textSize + functionNameSize, region.Address)
                 };
 
                 fixed (byte* pBuffer = buffer) {
@@ -198,10 +212,6 @@ namespace ShootBlues {
             }
 
             return result;
-        }
-
-        public void Dispose () {
-            DestroyHandle();
         }
     }
 }

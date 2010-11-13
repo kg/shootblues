@@ -8,6 +8,7 @@ using System.Windows.Forms;
 namespace ShootBlues {
     public interface IManagedScript : IDisposable {
         IEnumerator<object> LoadInto (ProcessInfo process);
+        IEnumerator<object> LoadedInto (ProcessInfo process);
         IEnumerator<object> UnloadFrom (ProcessInfo process);
         IEnumerator<object> OnStatusWindowShown (IStatusWindow statusWindow);
         IEnumerator<object> OnStatusWindowHidden (IStatusWindow statusWindow);

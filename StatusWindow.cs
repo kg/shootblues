@@ -64,33 +64,9 @@ namespace ShootBlues {
         }
 
         private IEnumerator<object> DoEval (ProcessInfo process, string pythonText) {
-            var messageID = process.Channel.GetMessageID();
-            var fResult = process.Channel.WaitForMessage(messageID);
-
-            if (pythonText.Contains('\n') || pythonText.Contains("return "))
-                pythonText = "  " + pythonText.Replace("\t", "  ").Replace("\n", "\n  ");
-            else
-                pythonText = "  return " + pythonText;
-
-            pythonText = String.Format(
-                @"def __eval__():
-{0}
-result = __eval__()
-if result:
-  result = repr(result)
-from shootblues import rpcSend
-rpcSend(result, id={1}L)", pythonText, messageID
-            );
-
-            yield return Future.RunInThread(() =>
-                process.Channel.Send(new RPCMessage {
-                    Type = RPCMessageType.Run,
-                    Text = pythonText
-                })
-            );
-
-            yield return fResult;
-            byte[] result = fResult.Result;
+            var f = Program.EvalPython(process, pythonText);
+            yield return f;
+            byte[] result = f.Result;
             MessageBox.Show(Encoding.ASCII.GetString(result), "Result");
         }
 

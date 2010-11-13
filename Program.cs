@@ -8,10 +8,50 @@ using System.Text;
 using System.IO;
 
 namespace ShootBlues {
-    public class ProcessInfo {
-        public Process Process;
-        public RPCChannel Channel;
-        public string Status;
+    public class ProcessInfo : IDisposable {
+        public Process Process = null;
+        public RPCChannel Channel = null;
+        public string Status = "Unknown";
+
+        private Dictionary<string, RPCResponseChannel> NamedChannels = new Dictionary<string, RPCResponseChannel>();
+        private HashSet<IFuture> OwnedFutures = new HashSet<IFuture>();
+
+        public ProcessInfo (Process process) {
+            Process = process;
+            Channel = new RPCChannel(process);
+        }
+
+        public RPCResponseChannel GetNamedChannel (string name) {
+            RPCResponseChannel result;
+            if (!NamedChannels.TryGetValue(name, out result))
+                NamedChannels[name] = result = new RPCResponseChannel(Process);
+
+            return result;
+        }
+
+        public IFuture Start (ISchedulable schedulable) {
+            var f = Program.Scheduler.Start(schedulable, TaskExecutionPolicy.RunWhileFutureLives);
+            OwnedFutures.Add(f);
+            return f;
+        }
+
+        public IFuture Start (IEnumerator<object> task) {
+            var f = Program.Scheduler.Start(task, TaskExecutionPolicy.RunWhileFutureLives);
+            OwnedFutures.Add(f);
+            return f;
+        }
+
+        public void Dispose () {
+            foreach (var f in OwnedFutures)
+                f.Dispose();
+            OwnedFutures.Clear();
+
+            foreach (var nc in NamedChannels.Values)
+                nc.Dispose();
+            NamedChannels.Clear();
+
+            Channel.Dispose();
+        }
 
         public override string ToString () {
             return String.Format("{0} - {1}", Process.Id, Status);
@@ -21,6 +61,7 @@ namespace ShootBlues {
     public static class Program {
         private static StatusWindow StatusWindowInstance = null;
         private static ContextMenuStrip TrayMenu = null;
+        private static Dictionary<string, SignalFuture> LoadingScripts = new Dictionary<string, SignalFuture>();
         private static int ExitCode = 0;
 
         public static readonly Signal RunningProcessesChanged = new Signal();
@@ -110,15 +151,32 @@ namespace ShootBlues {
         }
 
         public static IEnumerator<object> ShowStatusWindow () {
+            return ShowStatusWindow(null);
+        }
+
+        public static IEnumerator<object> ShowStatusWindow (string initialPage) {
             if (StatusWindowInstance != null) {
                 StatusWindowInstance.Activate();
                 StatusWindowInstance.Focus();
+
+                if (initialPage != null)
+                    try {
+                        StatusWindowInstance.Tabs.SelectedTab = StatusWindowInstance.Tabs.TabPages[initialPage];
+                    } catch {
+                    }
+
                 yield break;
             }
 
             using (StatusWindowInstance = new StatusWindow(Scheduler)) {
                 foreach (var instance in ManagedScripts.Values)
                     yield return instance.OnStatusWindowShown(StatusWindowInstance);
+
+                if (initialPage != null)
+                    try {
+                        StatusWindowInstance.Tabs.SelectedTab = StatusWindowInstance.Tabs.TabPages[initialPage];
+                    } catch {
+                    }
 
                 yield return StatusWindowInstance.Show();
             }
@@ -150,10 +208,6 @@ namespace ShootBlues {
 
             Console.WriteLine("Injecting payload into process {0}...", process.Id);
 
-            var pi = new ProcessInfo {
-                Process = process,
-                Status = "Injecting payload"
-            };
             var processExit = new SignalFuture();
             process.Exited += (s, e) => {
                 processExit.Complete();
@@ -161,7 +215,7 @@ namespace ShootBlues {
             };
             process.EnableRaisingEvents = true;
 
-            using (pi.Channel = new RPCChannel(process)) {
+            using (var pi = new ProcessInfo(process)) {
                 var payloadResult = new Future<Int32>();
                 var threadId = new Future<UInt32>();
 
@@ -199,15 +253,26 @@ namespace ShootBlues {
                     pi.Status = String.Format("Payload terminated with exit code {0}.", payloadResult.Result);
                     RunningProcessesChanged.Set();
                 }
+
+                yield return processExit;
+                RunningProcesses.Remove(pi);
             }
 
-            yield return processExit;
-
-            RunningProcesses.Remove(pi);
             RunningProcessesChanged.Set();
         }
 
         public static IEnumerator<object> LoadManagedScript (string scriptFilename) {
+            IManagedScript instance;
+            SignalFuture loadFuture;
+            if (LoadingScripts.TryGetValue(scriptFilename, out loadFuture)) {
+                yield return loadFuture;
+                yield break;
+            } else if (ManagedScripts.TryGetValue(scriptFilename, out instance)) {
+                yield break;
+            } else {
+                LoadingScripts[scriptFilename] = loadFuture = new SignalFuture();
+            }
+
             var fAssembly = Future.RunInThread(() =>
                 Assembly.LoadFile(scriptFilename)
             );
@@ -222,9 +287,10 @@ namespace ShootBlues {
                     continue;
 
                 var constructor = type.GetConstructor(new Type[0]);
-                var instance = constructor.Invoke(null) as IManagedScript;
+                instance = constructor.Invoke(null) as IManagedScript;
 
                 ManagedScripts[scriptFilename] = instance;
+                loadFuture.Complete();
 
                 if (StatusWindowInstance != null)
                     yield return instance.OnStatusWindowShown(StatusWindowInstance);
@@ -301,6 +367,44 @@ namespace ShootBlues {
             }
         }
 
+        public static Future<byte[]> EvalPython (ProcessInfo process, string pythonText) {
+            var messageID = process.Channel.GetMessageID();
+            var fResult = process.Channel.WaitForMessage(messageID);
+
+            if (pythonText.Contains("\n") || pythonText.Contains("return "))
+                pythonText = "  " + pythonText.Replace("\t", "  ").Replace("\n", "\n  ");
+            else
+                pythonText = "  return " + pythonText;
+
+            pythonText = String.Format(
+                @"def __eval__():
+{0}
+result = __eval__()
+if result:
+  result = repr(result)
+from shootblues import rpcSend
+rpcSend(result, id={1}L)", pythonText, messageID
+            );
+
+            Future.RunInThread(() =>
+                process.Channel.Send(new RPCMessage {
+                    Type = RPCMessageType.Run,
+                    Text = pythonText
+                })
+            );
+
+            return fResult;
+        }
+
+        public static Future<byte[]> CallFunction (ProcessInfo process, string moduleName, string functionName, string arguments) {
+            return process.Channel.Send(new RPCMessage {
+                Type = RPCMessageType.CallFunction,
+                ModuleName = moduleName,
+                FunctionName = functionName,
+                Text = arguments
+            }, true);
+        }
+
         public static IEnumerator<object> ReloadModules (ProcessInfo pi) {
             yield return UnloadDeadManagedScripts();
 
@@ -308,6 +412,9 @@ namespace ShootBlues {
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.ReloadModules
                 }));
+
+            foreach (var instance in ManagedScripts.Values)
+                yield return instance.LoadedInto(pi);
         }
 
         private static IEnumerator<object> RPCTask (ProcessInfo pi) {
