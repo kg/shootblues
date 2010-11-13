@@ -67,7 +67,8 @@ namespace ShootBlues {
             var f = Program.EvalPython(process, pythonText);
             yield return f;
             byte[] result = f.Result;
-            MessageBox.Show(Encoding.ASCII.GetString(result), "Result");
+            if ((result != null) && (result.Length > 0))
+                MessageBox.Show(Encoding.ASCII.GetString(result), "Result");
         }
 
         private void RunningProcessList_MouseDown (object sender, MouseEventArgs e) {

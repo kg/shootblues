@@ -122,6 +122,12 @@ namespace ShootBlues {
             return result;
         }
 
+        public UInt32 ChannelID {
+            get {
+                return (UInt32)Handle.ToInt64();
+            }
+        }
+
         public void Dispose () {
             DestroyHandle();
         }

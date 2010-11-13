@@ -252,7 +252,7 @@ namespace ShootBlues {
                 yield return ScriptsChanged.Wait();
 
                 foreach (var script in Scripts)
-                    if (!ManagedScripts.ContainsKey(script))
+                    if ((script.Extension == ".dll") && !ManagedScripts.ContainsKey(script))
                         yield return LoadManagedScript(script);
 
                 yield return UnloadDeadManagedScripts();
