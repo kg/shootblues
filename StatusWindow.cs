@@ -30,11 +30,11 @@ namespace ShootBlues {
         }
 
         public IEnumerator<object> ShowScriptList () {
-            string selectedScript;
+            Filename selectedScript;
 
             while (true) {
                 if (ScriptsList.SelectedItems.Count > 0)
-                    selectedScript = ScriptsList.SelectedItem as string;
+                    selectedScript = ScriptsList.SelectedItem as Filename;
                 else
                     selectedScript = null;
 
@@ -128,7 +128,7 @@ namespace ShootBlues {
 
             foreach (var pi in Program.RunningProcesses) {
                 foreach (var filename in filenames)
-                    yield return Program.SendScriptFile(pi, filename);
+                    yield return Program.LoadScriptFromFilename(pi, filename);
 
                 yield return Program.ReloadModules(pi);
             }
@@ -141,7 +141,7 @@ namespace ShootBlues {
         private IEnumerator<object> ReloadAllScripts () {
             foreach (var pi in Program.RunningProcesses) {
                 foreach (var script in Program.Scripts)
-                    yield return Program.SendScriptFile(pi, script);
+                    yield return Program.LoadScriptFromFilename(pi, script);
 
                 yield return Program.ReloadModules(pi);
             }
@@ -152,14 +152,14 @@ namespace ShootBlues {
         }
 
         private void UnloadScriptButton_Click (object sender, EventArgs e) {
-            Start(RemoveScript(ScriptsList.SelectedItem as string));
+            Start(RemoveScript(ScriptsList.SelectedItem as Filename));
         }
 
         private IEnumerator<object> RemoveScript (string filename) {
             Program.Scripts.Remove(filename);
 
             foreach (var pi in Program.RunningProcesses) {
-                yield return Program.UnloadScriptByFilename(pi, filename);
+                yield return Program.UnloadScriptFromFilename(pi, filename);
 
                 yield return Program.ReloadModules(pi);
             }

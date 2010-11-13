@@ -8,10 +8,73 @@ using System.Text;
 using System.IO;
 
 namespace ShootBlues {
+    public class Filename {
+        public readonly string FullPath;
+
+        private Filename (string filename) {
+            FullPath = filename;
+        }
+
+        public string Extension {
+            get {
+                return Path.GetExtension(FullPath);
+            }
+        }
+
+        public string Name {
+            get {
+                return Path.GetFileName(FullPath);
+            }
+        }
+
+        public string NameWithoutExtension {
+            get {
+                return Path.GetFileNameWithoutExtension(FullPath);
+            }
+        }
+
+        public string Directory {
+            get {
+                return Path.GetDirectoryName(FullPath);
+            }
+        }
+
+        public static implicit operator Filename (string filename) {
+            return new Filename(Path.GetFullPath(filename));
+        }
+
+        public static implicit operator string (Filename filename) {
+            return filename.FullPath;
+        }
+
+        public override int GetHashCode () {
+            return FullPath.GetHashCode();
+        }
+
+        public override string ToString () {
+            return FullPath;
+        }
+
+        public override bool Equals (object obj) {
+            var fn = obj as Filename;
+            if (fn != null)
+                return FullPath.Equals(fn.FullPath);
+            else {
+                var str = obj as String;
+                if (str != null)
+                    return FullPath.Equals(str);
+                else
+                    return base.Equals(obj);
+            }
+        }
+    }
+
     public class ProcessInfo : IDisposable {
         public Process Process = null;
         public RPCChannel Channel = null;
         public string Status = "Unknown";
+
+        public HashSet<Filename> LoadedScripts = new HashSet<Filename>();
 
         private Dictionary<string, RPCResponseChannel> NamedChannels = new Dictionary<string, RPCResponseChannel>();
         private HashSet<IFuture> OwnedFutures = new HashSet<IFuture>();
@@ -67,8 +130,8 @@ namespace ShootBlues {
         public static readonly Signal RunningProcessesChanged = new Signal();
         public static readonly Signal ScriptsChanged = new Signal();
         public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
-        public static readonly HashSet<string> Scripts = new HashSet<string>();
-        public static readonly Dictionary<string, IManagedScript> ManagedScripts = new Dictionary<string, IManagedScript>();
+        public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
+        public static readonly Dictionary<Filename, IManagedScript> ManagedScripts = new Dictionary<Filename, IManagedScript>();
         public static TaskScheduler Scheduler;
 
         [STAThread]
@@ -238,7 +301,7 @@ namespace ShootBlues {
                     RunningProcessesChanged.Set();
 
                     foreach (var script in Scripts)
-                        yield return SendScriptFile(pi, script);
+                        yield return LoadScriptFromFilename(pi, script);
 
                     yield return ReloadModules(pi);
 
@@ -261,20 +324,20 @@ namespace ShootBlues {
             RunningProcessesChanged.Set();
         }
 
-        public static IEnumerator<object> LoadManagedScript (string scriptFilename) {
+        public static IEnumerator<object> LoadManagedScript (Filename script) {
             IManagedScript instance;
             SignalFuture loadFuture;
-            if (LoadingScripts.TryGetValue(scriptFilename, out loadFuture)) {
+            if (LoadingScripts.TryGetValue(script, out loadFuture)) {
                 yield return loadFuture;
                 yield break;
-            } else if (ManagedScripts.TryGetValue(scriptFilename, out instance)) {
+            } else if (ManagedScripts.TryGetValue(script, out instance)) {
                 yield break;
             } else {
-                LoadingScripts[scriptFilename] = loadFuture = new SignalFuture();
+                LoadingScripts[script] = loadFuture = new SignalFuture();
             }
 
             var fAssembly = Future.RunInThread(() =>
-                Assembly.LoadFile(scriptFilename)
+                Assembly.LoadFile(script)
             );
             yield return fAssembly;
 
@@ -289,7 +352,8 @@ namespace ShootBlues {
                 var constructor = type.GetConstructor(new Type[0]);
                 instance = constructor.Invoke(null) as IManagedScript;
 
-                ManagedScripts[scriptFilename] = instance;
+                ManagedScripts[script] = instance;
+                LoadingScripts.Remove(script);
                 loadFuture.Complete();
 
                 if (StatusWindowInstance != null)
@@ -299,7 +363,7 @@ namespace ShootBlues {
             }
         }
 
-        public static IEnumerator<object> SendScriptText (ProcessInfo pi, string moduleName, string scriptText) {
+        public static IEnumerator<object> LoadScriptFromString (ProcessInfo pi, string moduleName, string scriptText) {
             yield return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.AddModule,
@@ -309,28 +373,33 @@ namespace ShootBlues {
             );
         }
 
-        public static IEnumerator<object> SendScriptFile (ProcessInfo pi, string scriptFilename) {
-            if (Path.GetExtension(scriptFilename).ToLower() == ".py") {
+        public static IEnumerator<object> LoadScriptFromFilename (ProcessInfo pi, Filename script) {
+            if (pi.LoadedScripts.Contains(script))
+                yield break;
+
+            if (script.Extension == ".py") {
                 var fScript = Future.RunInThread(() =>
-                    File.ReadAllText(scriptFilename)
+                    File.ReadAllText(script)
                 );
                 yield return fScript;
 
-                var moduleName = Path.GetFileNameWithoutExtension(scriptFilename);
-                yield return SendScriptText(pi, moduleName, fScript.Result);
+                var moduleName = script.NameWithoutExtension;
+                pi.LoadedScripts.Add(script);
+                yield return LoadScriptFromString(pi, moduleName, fScript.Result);
 
             } else {
                 IManagedScript instance;
-                if (!ManagedScripts.TryGetValue(scriptFilename, out instance)) {
-                    yield return LoadManagedScript(scriptFilename);
-                    instance = ManagedScripts[scriptFilename];
+                if (!ManagedScripts.TryGetValue(script, out instance)) {
+                    yield return LoadManagedScript(script);
+                    instance = ManagedScripts[script];
                 }
 
+                pi.LoadedScripts.Add(script);
                 yield return instance.LoadInto(pi);
             }
         }
 
-        public static IEnumerator<object> UnloadScriptByModuleName (ProcessInfo pi, string moduleName) {
+        public static IEnumerator<object> UnloadScriptFromModuleName (ProcessInfo pi, string moduleName) {
             yield return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.RemoveModule,
@@ -339,25 +408,35 @@ namespace ShootBlues {
             );
         }
 
-        public static IEnumerator<object> UnloadScriptByFilename (ProcessInfo pi, string scriptFilename) {
-            if (Path.GetExtension(scriptFilename).ToLower() == ".py") {
-                yield return UnloadScriptByModuleName(
+        public static IEnumerator<object> UnloadScriptFromFilename (ProcessInfo pi, Filename script) {
+            if (script.Extension == ".py") {
+                yield return UnloadScriptFromModuleName(
                     pi, 
-                    Path.GetFileNameWithoutExtension(scriptFilename)
+                    script.NameWithoutExtension
                 );
             } else {
-                var instance = ManagedScripts[scriptFilename];
+                if (pi.LoadedScripts.Contains(script)) {
+                    var instance = ManagedScripts[script];
 
-                yield return instance.UnloadFrom(pi);
+                    pi.LoadedScripts.Remove(script);
+                    yield return instance.UnloadFrom(pi);
+                }
             }
         }
 
         public static IEnumerator<object> UnloadDeadManagedScripts () {
-            var keys = new string[ManagedScripts.Count];
+            var keys = new Filename[ManagedScripts.Count];
             ManagedScripts.Keys.CopyTo(keys, 0);
 
             foreach (var key in keys) {
-                if (!Scripts.Contains(key)) {
+                bool inUse = Scripts.Contains(key);
+
+                if (!inUse)
+                    foreach (var pi in RunningProcesses)
+                        if (pi.LoadedScripts.Contains(key))
+                            inUse = true;
+
+                if (!inUse) {
                     if (StatusWindowInstance != null)
                         yield return ManagedScripts[key].OnStatusWindowHidden(StatusWindowInstance);
 
