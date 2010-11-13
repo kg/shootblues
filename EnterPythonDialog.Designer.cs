@@ -84,7 +84,7 @@
             this.MinimizeBox = false;
             this.Name = "EnterPythonDialog";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text = "Enter Python";
+            this.Text = "Eval Python";
             this.ResumeLayout(false);
             this.PerformLayout();
 

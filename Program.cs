@@ -18,20 +18,22 @@ namespace ShootBlues {
         }
     }
 
-    static class Program {
-        public static StatusWindow StatusWindowInstance = null;
-        public static Signal RunningProcessesChanged = new Signal();
-        public static Signal ScriptsChanged = new Signal();
-        public static HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
-        public static HashSet<string> Scripts = new HashSet<string>();
+    public static class Program {
+        private static StatusWindow StatusWindowInstance = null;
+        private static int ExitCode = 0;
+
+        public static readonly Signal RunningProcessesChanged = new Signal();
+        public static readonly Signal ScriptsChanged = new Signal();
+        public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
+        public static readonly HashSet<string> Scripts = new HashSet<string>();
+        public static readonly Dictionary<string, IManagedScript> ManagedScripts = new Dictionary<string, IManagedScript>();
         public static TaskScheduler Scheduler;
-        public static int ExitCode = 0;
 
         [STAThread]
-        static void Main () {
+        private static void Main () {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            
+
             using (Scheduler = new TaskScheduler(JobQueue.WindowsMessageBased)) {
                 Scheduler.ErrorHandler = OnTaskError;
 
@@ -51,18 +53,18 @@ namespace ShootBlues {
             Environment.Exit(ExitCode);
         }
 
-        public static bool OnTaskError (Exception error) {
+        private static bool OnTaskError (Exception error) {
             MessageBox.Show(error.ToString(), "Error in background task");
 
             return true;
         }
 
-        public static void AddItem (this ContextMenuStrip menu, string text, EventHandler onClick) {
+        private static void AddItem (this ContextMenuStrip menu, string text, EventHandler onClick) {
             var newItem = menu.Items.Add(text);
             newItem.Click += onClick;
         }
 
-        public static IEnumerator<object> MainTask () {
+        private static IEnumerator<object> MainTask () {
             var trayMenu = new ContextMenuStrip();
             trayMenu.AddItem("&Status", (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask));
             trayMenu.Items.Add("-");
@@ -101,7 +103,7 @@ namespace ShootBlues {
             StatusWindowInstance = null;
         }
 
-        public static IEnumerator<object> ProcessTask (Process process) {
+        private static IEnumerator<object> ProcessTask (Process process) {
             var payload = Future.RunInThread(() => {
                 using (var payloadStream = Assembly.GetExecutingAssembly().
                     GetManifestResourceStream("ShootBlues.payload.dll")) {
@@ -147,7 +149,7 @@ namespace ShootBlues {
                     RunningProcessesChanged.Set();
 
                     foreach (var script in Scripts)
-                        yield return SendModule(pi, script);
+                        yield return SendScriptFile(pi, script);
 
                     yield return ReloadModules(pi);
 
@@ -170,23 +172,99 @@ namespace ShootBlues {
             RunningProcessesChanged.Set();
         }
 
-        public static IFuture SendModule (ProcessInfo pi, string scriptFilename) {
-            return Future.RunInThread(() =>
+        public static IEnumerator<object> LoadManagedScript (string scriptFilename) {
+            var fAssembly = Future.RunInThread(() =>
+                Assembly.LoadFile(scriptFilename)
+            );
+            yield return fAssembly;
+
+            var fTypes = Future.RunInThread(() => fAssembly.Result.GetTypes());
+            yield return fTypes;
+
+            var managedScript = typeof(IManagedScript);
+            foreach (var type in fTypes.Result) {
+                if (!managedScript.IsAssignableFrom(type))
+                    continue;
+
+                var constructor = type.GetConstructor(new Type[0]);
+                var instance = constructor.Invoke(null) as IManagedScript;
+
+                ManagedScripts[scriptFilename] = instance;
+
+                break;
+            }
+        }
+
+        public static IEnumerator<object> SendScriptText (ProcessInfo pi, string moduleName, string scriptText) {
+            yield return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.AddModule,
-                    ModuleName = Path.GetFileNameWithoutExtension(scriptFilename),
-                    Text = File.ReadAllText(scriptFilename)
-                }));
+                    ModuleName = moduleName,
+                    Text = scriptText
+                })
+            );
+        }
+
+        public static IEnumerator<object> SendScriptFile (ProcessInfo pi, string scriptFilename) {
+            if (Path.GetExtension(scriptFilename).ToLower() == ".py") {
+                var fScript = Future.RunInThread(() =>
+                    File.ReadAllText(scriptFilename)
+                );
+                yield return fScript;
+
+                var moduleName = Path.GetFileNameWithoutExtension(scriptFilename);
+                yield return SendScriptText(pi, moduleName, fScript.Result);
+
+            } else {
+                IManagedScript instance;
+                if (!ManagedScripts.TryGetValue(scriptFilename, out instance)) {
+                    yield return LoadManagedScript(scriptFilename);
+                    instance = ManagedScripts[scriptFilename];
+                }
+
+                yield return instance.LoadInto(pi);
+            }
+        }
+
+        public static IEnumerator<object> UnloadScriptByModuleName (ProcessInfo pi, string moduleName) {
+            yield return Future.RunInThread(() =>
+                pi.Channel.Send(new RPCMessage {
+                    Type = RPCMessageType.RemoveModule,
+                    ModuleName = moduleName
+                })
+            );
+        }
+
+        public static IEnumerator<object> UnloadScriptByFilename (ProcessInfo pi, string scriptFilename) {
+            if (Path.GetExtension(scriptFilename).ToLower() == ".py") {
+                yield return UnloadScriptByModuleName(
+                    pi, 
+                    Path.GetFileNameWithoutExtension(scriptFilename)
+                );
+            } else {
+                var instance = ManagedScripts[scriptFilename];
+
+                yield return instance.UnloadFrom(pi);
+            }
         }
 
         public static IFuture ReloadModules (ProcessInfo pi) {
+            var keys = new string[ManagedScripts.Count];
+            ManagedScripts.Keys.CopyTo(keys, 0);
+            foreach (var key in keys) {
+                if (!Scripts.Contains(key)) {
+                    ManagedScripts[key].Dispose();
+                    ManagedScripts.Remove(key);
+                }
+            }
+
             return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.ReloadModules
                 }));
         }
 
-        public static IEnumerator<object> RPCTask (ProcessInfo pi) {
+        private static IEnumerator<object> RPCTask (ProcessInfo pi) {
             while (true) {
                 var fMessage = pi.Channel.Receive();
                 yield return fMessage;

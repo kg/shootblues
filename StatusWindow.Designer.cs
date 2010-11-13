@@ -35,7 +35,8 @@
             this.LoadScriptButton = new System.Windows.Forms.Button();
             this.ImageList = new System.Windows.Forms.ImageList(this.components);
             this.ProcessMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this.RunPythonMenu = new System.Windows.Forms.ToolStripMenuItem();
+            this.EvalPythonMenu = new System.Windows.Forms.ToolStripMenuItem();
+            this.LoadScriptMenu = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.RunningProcessGroupBox.SuspendLayout();
             this.Tabs.SuspendLayout();
             this.ScriptsPage.SuspendLayout();
@@ -109,7 +110,7 @@
             this.ScriptsList.ItemHeight = 16;
             this.ScriptsList.Location = new System.Drawing.Point(6, 6);
             this.ScriptsList.Name = "ScriptsList";
-            this.ScriptsList.Size = new System.Drawing.Size(413, 234);
+            this.ScriptsList.Size = new System.Drawing.Size(413, 230);
             this.ScriptsList.Sorted = true;
             this.ScriptsList.TabIndex = 0;
             this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
@@ -165,16 +166,21 @@
             // ProcessMenu
             // 
             this.ProcessMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.RunPythonMenu});
+            this.EvalPythonMenu});
             this.ProcessMenu.Name = "ProcessMenu";
             this.ProcessMenu.Size = new System.Drawing.Size(146, 26);
             // 
-            // RunPythonMenu
+            // EvalPythonMenu
             // 
-            this.RunPythonMenu.Name = "RunPythonMenu";
-            this.RunPythonMenu.Size = new System.Drawing.Size(145, 22);
-            this.RunPythonMenu.Text = "&Run Python...";
-            this.RunPythonMenu.Click += new System.EventHandler(this.RunPythonMenu_Click);
+            this.EvalPythonMenu.Name = "EvalPythonMenu";
+            this.EvalPythonMenu.Size = new System.Drawing.Size(145, 22);
+            this.EvalPythonMenu.Text = "&Eval Python...";
+            this.EvalPythonMenu.Click += new System.EventHandler(this.RunPythonMenu_Click);
+            // 
+            // LoadScriptMenu
+            // 
+            this.LoadScriptMenu.Name = "LoadScriptMenu";
+            this.LoadScriptMenu.Size = new System.Drawing.Size(153, 26);
             // 
             // StatusWindow
             // 
@@ -209,8 +215,9 @@
         private System.Windows.Forms.Button UnloadScriptButton;
         private System.Windows.Forms.ImageList ImageList;
         private System.Windows.Forms.ContextMenuStrip ProcessMenu;
-        private System.Windows.Forms.ToolStripMenuItem RunPythonMenu;
+        private System.Windows.Forms.ToolStripMenuItem EvalPythonMenu;
         private System.Windows.Forms.ListBox ScriptsList;
+        private System.Windows.Forms.ContextMenuStrip LoadScriptMenu;
     }
 }
 

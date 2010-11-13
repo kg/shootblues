@@ -60,10 +60,38 @@ namespace ShootBlues {
 
             using (var dialog = new EnterPythonDialog())
                 if (dialog.ShowDialog(this) == DialogResult.OK)
-                    process.Channel.Send(new RPCMessage {
-                        Type = RPCMessageType.Run,
-                        Text = dialog.PythonText.Text
-                    });
+                    Start(DoEval(process, dialog.PythonText.Text));
+        }
+
+        private IEnumerator<object> DoEval (ProcessInfo process, string pythonText) {
+            var messageID = process.Channel.GetMessageID();
+            var fResult = process.Channel.WaitForMessage(messageID);
+
+            if (pythonText.Contains('\n') || pythonText.Contains("return "))
+                pythonText = "  " + pythonText.Replace("\t", "  ").Replace("\n", "\n  ");
+            else
+                pythonText = "  return " + pythonText;
+
+            pythonText = String.Format(
+                @"def __eval__():
+{0}
+result = __eval__()
+if result:
+  result = repr(result)
+from shootblues import rpcSend
+rpcSend(result, id={1}L)", pythonText, messageID
+            );
+
+            yield return Future.RunInThread(() =>
+                process.Channel.Send(new RPCMessage {
+                    Type = RPCMessageType.Run,
+                    Text = pythonText
+                })
+            );
+
+            yield return fResult;
+            byte[] result = fResult.Result;
+            MessageBox.Show(Encoding.ASCII.GetString(result), "Result");
         }
 
         private void RunningProcessList_MouseDown (object sender, MouseEventArgs e) {
@@ -82,7 +110,7 @@ namespace ShootBlues {
         private void LoadScriptButton_Click (object sender, EventArgs e) {
             using (var dialog = new OpenFileDialog()) {
                 dialog.Title = "Load Script";
-                dialog.Filter = "Python Scripts|*.py";
+                dialog.Filter = "All Scripts|*.dll;*.py|Managed Scripts|*.dll|Python Scripts|*.py";
                 dialog.CheckFileExists = true;
 
                 if (dialog.ShowDialog() != DialogResult.OK)
@@ -109,7 +137,10 @@ namespace ShootBlues {
                     return;
 
                 Start(AddScripts(
-                    from file in files where Path.GetExtension(file).ToLower() == ".py" select file
+                    from file in files where (
+                        (Path.GetExtension(file).ToLower() == ".py") ||
+                        (Path.GetExtension(file).ToLower() == ".dll")
+                    ) select file
                 ));
             }
         }
@@ -121,7 +152,7 @@ namespace ShootBlues {
 
             foreach (var pi in Program.RunningProcesses) {
                 foreach (var filename in filenames)
-                    yield return Program.SendModule(pi, filename);
+                    yield return Program.SendScriptFile(pi, filename);
 
                 yield return Program.ReloadModules(pi);
             }
@@ -134,7 +165,7 @@ namespace ShootBlues {
         private IEnumerator<object> ReloadAllScripts () {
             foreach (var pi in Program.RunningProcesses) {
                 foreach (var script in Program.Scripts)
-                    yield return Program.SendModule(pi, script);
+                    yield return Program.SendScriptFile(pi, script);
 
                 yield return Program.ReloadModules(pi);
             }
@@ -153,10 +184,7 @@ namespace ShootBlues {
             Program.ScriptsChanged.Set();
 
             foreach (var pi in Program.RunningProcesses) {
-                pi.Channel.Send(new RPCMessage {
-                    Type = RPCMessageType.RemoveModule,
-                    ModuleName = Path.GetFileNameWithoutExtension(filename)
-                });
+                yield return Program.UnloadScriptByFilename(pi, filename);
 
                 yield return Program.ReloadModules(pi);
             }

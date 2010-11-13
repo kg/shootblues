@@ -12,7 +12,8 @@ namespace ShootBlues {
         Run = 0,
         AddModule = 1,
         RemoveModule = 2,
-        ReloadModules = 3
+        ReloadModules = 3,
+        CallFunction = 4
     }
 
     public struct RPCMessage {
@@ -24,6 +25,7 @@ namespace ShootBlues {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct TransportRPCMessage {
         public RPCMessageType Type;
+        public UInt32 MessageId;
         public UInt32 ModuleName;
         public UInt32 Text;
     }
@@ -33,7 +35,9 @@ namespace ShootBlues {
         private const int WS_EX_NOACTIVATE = 0x08000000;
 
         private Process _Process;
+        private Dictionary<UInt32, Future<byte[]>> _AwaitingResponses = new Dictionary<uint, Future<byte[]>>();
         private BlockingQueue<byte[]> _Messages = new BlockingQueue<byte[]>();
+        private Random _Random = new Random();
 
         public UInt32 RemoteThreadId = 0;
 
@@ -55,18 +59,25 @@ namespace ShootBlues {
             CreateHandle(cp);
         }
 
-        protected unsafe byte[] ReadRemoteData (IntPtr address, UInt32 size) {
+        protected unsafe byte[] ReadRemoteData (IntPtr address, UInt32 size, out UInt32 messageId) {
             int bytesRead = 0;
             byte[] result = new byte[size];
             using (var handle = new SafeProcessHandle(
                 Win32.OpenProcess(ProcessAccessFlags.All, false, _Process.Id)
             ))
             fixed (byte* pResult = result)
+            fixed (UInt32* pId = &messageId) {
                 Win32.ReadProcessMemory(
                     handle.DangerousGetHandle(), address,
+                    new IntPtr(pId), 4,
+                    out bytesRead
+                );
+                Win32.ReadProcessMemory(
+                    handle.DangerousGetHandle(), new IntPtr(address.ToInt64() + 4),
                     new IntPtr(pResult), size,
                     out bytesRead
                 );
+            }
 
             if (bytesRead != 0)
                 return result;
@@ -77,10 +88,17 @@ namespace ShootBlues {
         protected override void WndProc (ref Message m) {
             if (m.Msg == WM_RPC_MESSAGE) {
                 byte[] messageData = null;
+                UInt32 messageID = 0;
                 if ((m.WParam != IntPtr.Zero) && (m.LParam != IntPtr.Zero))
-                    messageData = ReadRemoteData(m.WParam, (uint)m.LParam.ToInt64());
+                    messageData = ReadRemoteData(m.WParam, (uint)m.LParam.ToInt64(), out messageID);
 
-                _Messages.Enqueue(messageData);
+                Future<byte[]> fResult;
+                if (_AwaitingResponses.TryGetValue(messageID, out fResult)) {
+                    _AwaitingResponses.Remove(messageID);
+                    fResult.SetResult(messageData, null);
+                } else {
+                    _Messages.Enqueue(messageData);
+                }
             } else {
                 base.WndProc(ref m);
             }
@@ -88,6 +106,12 @@ namespace ShootBlues {
 
         public Future<byte[]> Receive () {
             return _Messages.Dequeue();
+        }
+
+        public UInt32 GetMessageID () {
+            var buf = new byte[4];
+            _Random.NextBytes(buf);
+            return BitConverter.ToUInt32(buf, 0);
         }
 
         private UInt32 TransportStringSize (string text) {
@@ -106,7 +130,17 @@ namespace ShootBlues {
             return (UInt32)(baseAddress.ToInt64() + offset);
         }
 
-        public unsafe void Send (RPCMessage message) {
+        public Future<byte[]> WaitForMessage (UInt32 messageID) {
+            var result = new Future<byte[]>();
+            _AwaitingResponses[messageID] = result;
+            return result;
+        }
+
+        public void Send (RPCMessage message) {
+            Send(message, false);
+        }
+
+        public unsafe Future<byte[]> Send (RPCMessage message, bool wantResponse) {
             if (_Process == null)
                 throw new Exception("No remote process");
             if (RemoteThreadId == 0)
@@ -115,11 +149,19 @@ namespace ShootBlues {
             UInt32 messageSize = (UInt32)Marshal.SizeOf(typeof(TransportRPCMessage));
             UInt32 moduleNameSize = TransportStringSize(message.ModuleName);
             UInt32 textSize = TransportStringSize(message.Text);
+            Future<byte[]> result = null;
+            UInt32 messageID = 0;
+
+            if (wantResponse) {
+                messageID = GetMessageID();
+                result = new Future<byte[]>();
+                _AwaitingResponses[messageID] = result;
+            }
 
             using (var handle = new SafeProcessHandle(
                 Win32.OpenProcess(ProcessAccessFlags.All, false, _Process.Id)
             )) {
-                int result;
+                int numBytes;
                 ProcessInjector.RemoteMemoryRegion region;
                 var regionSize = messageSize + moduleNameSize + textSize;
                 var buffer = new byte[regionSize];
@@ -131,6 +173,7 @@ namespace ShootBlues {
 
                 object transportMessage = new TransportRPCMessage {
                     Type = message.Type,
+                    MessageId = messageID,
                     Text = WriteTransportString(message.Text, buffer, messageSize, region.Address),
                     ModuleName = WriteTransportString(message.ModuleName, buffer, messageSize + textSize, region.Address)
                 };
@@ -141,11 +184,11 @@ namespace ShootBlues {
                     Win32.WriteProcessMemory(
                         _Process.Handle, (uint)region.Address.ToInt64(),
                         new IntPtr(pBuffer), region.Size,
-                        out result
+                        out numBytes
                     );
                 }
 
-                if (result != regionSize) {
+                if (numBytes != regionSize) {
                     var error = Win32.GetLastError();
                     region.Dispose();
                     throw new Exception(String.Format("Remote write failed: error {0:x8}", error));
@@ -153,6 +196,8 @@ namespace ShootBlues {
 
                 Win32.PostThreadMessage(RemoteThreadId, WM_RPC_MESSAGE, region.Address, region.Size);
             }
+
+            return result;
         }
 
         public void Dispose () {

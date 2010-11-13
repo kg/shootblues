@@ -5,13 +5,15 @@ enum RPCMessageType : unsigned int {
   RMT_Run = 0,
   RMT_AddModule = 1,
   RMT_RemoveModule = 2,
-  RMT_ReloadModules = 3
+  RMT_ReloadModules = 3,
+  RMT_CallFunction = 4
 };
 
 #pragma pack(push)
 #pragma pack(1)
 struct RPCMessage {
   RPCMessageType type;
+  unsigned int messageId;
   const char * moduleName;
   const char * text;
 };
@@ -27,35 +29,40 @@ static PyObject * g_sysModule;
 static PyObject * g_tracebackModule;
 static PyObject * g_module;
 static PyObject * g_moduleDict;
+static PyObject * g_unloadedModules;
 
-PyObject * rpcSend (PyObject * self, PyObject * args) {
-    const char *messageBody;
-    if (!PyArg_ParseTuple(args, "s", &messageBody)) {
-      PyErr_SetString(g_excValueError, "rpcSend requires a message body string as its only argument");
-      return NULL;
-    }
-
-    // Allocate enough memory to hold our message body and store it there
-    size_t regionSize = strlen(messageBody) + 1;
-    LPVOID region = VirtualAlloc(0, regionSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    if (region) {
-      strcpy((char *)region, messageBody);
-
-      // Post a message to our parent process (it will free our memory region once it gets the message)
-      if (PostMessage(
-        g_rpcWindow, g_rpcMessageId, 
-        reinterpret_cast<WPARAM>(region), 
-        *reinterpret_cast<LPARAM*>(&regionSize)
-      ))
-        return Py_BuildValue("");
-    }
-
-    PyErr_SetFromWindowsErr(GetLastError());
+PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
+  static char * kwlist[] = {"messageBody", "id", NULL};
+  char * messageBody = 0;
+  unsigned int messageId = 0;
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "z|I", kwlist, &messageBody, &messageId))
     return NULL;
+
+  // Allocate enough memory to hold our message body and store it there
+  size_t regionSize = 4;
+  if (messageBody)
+    regionSize += strlen(messageBody) + 1;
+  LPVOID region = VirtualAlloc(0, regionSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  if (region) {
+    *reinterpret_cast<unsigned int *>(region) = messageId;
+    if (messageBody)
+      strcpy((char *)region + sizeof(messageId), messageBody);
+
+    // Post a message to our parent process (it will free our memory region once it gets the message)
+    if (PostMessage(
+      g_rpcWindow, g_rpcMessageId, 
+      reinterpret_cast<WPARAM>(region), 
+      *reinterpret_cast<LPARAM *>(&regionSize)
+    ))
+      return Py_BuildValue("");
+  }
+
+  PyErr_SetFromWindowsErr(GetLastError());
+  return NULL;
 }
 
 void errorHandler () {
-  PyObject *errType = 0, *errValue = 0, *traceback = 0;
+  PyObject * errType = 0, * errValue = 0, * traceback = 0;
   PyErr_Fetch(&errType, &errValue, &traceback);
   if (!errType)
     errType = Py_BuildValue("");
@@ -76,7 +83,8 @@ void errorHandler () {
     if (exceptionString) {
       Py_XDECREF(args);
       args = PyTuple_Pack(1, exceptionString);
-      PyObject * result = rpcSend(0, args);
+      PyObject * kwargs = Py_BuildValue("{s,I}", "id", 0);
+      PyObject * result = rpcSend(0, args, kwargs);
       Py_XDECREF(result);
       Py_XDECREF(exceptionString);
     }
@@ -91,7 +99,37 @@ void errorHandler () {
   PyErr_Clear();
 }
 
-void runString (const char * script) {
+void callFunction (const char * moduleName, const char * functionName, unsigned int messageId) {
+  PyObject * module = PyObject_GetAttrString(g_module, moduleName);
+  if (!module)
+    return errorHandler();
+  PyObject * function = PyObject_GetAttrString(module, functionName);
+  if (!function) {
+    Py_DECREF(module);
+    return errorHandler();
+  }
+  PyObject * args = PyTuple_New(0);
+  PyObject * result = PyObject_CallObject(function, args);
+
+  if (result) {
+    PyObject * resultRepr = PyObject_Repr(result);
+    Py_DECREF(args);
+    args = PyTuple_Pack(1, resultRepr);
+    PyObject * kwargs = Py_BuildValue("{s:I}", "id", messageId);
+    Py_DECREF(result);
+    result = rpcSend(0, args, kwargs);
+    Py_DECREF(kwargs);
+    Py_DECREF(resultRepr);
+  } else
+    errorHandler();
+
+  Py_DECREF(args);
+  Py_XDECREF(result);
+  Py_DECREF(function);
+  Py_DECREF(module);
+}
+
+void runString (const char * script, unsigned int messageId) {
   PyCodeObject * codeObject = (PyCodeObject *)Py_CompileStringFlags(
     script, "shootblues", Py_file_input, 0
   );
@@ -101,9 +139,7 @@ void runString (const char * script) {
     if (module != NULL) {
       PyObject * globals = PyModule_GetDict(module);
       PyObject * result = PyEval_EvalCode(codeObject, globals, globals);
-
-      if (result != NULL)
-        Py_DECREF(result);
+      Py_XDECREF(result);
 
       if (PyErr_Occurred())
         errorHandler();
@@ -113,14 +149,14 @@ void runString (const char * script) {
   }
 }
 
-PyObject * run (PyObject * self, PyObject * args) {
-  const char * script;
-  if (!PyArg_ParseTuple(args, "s", &script)) {
-    PyErr_SetString(g_excValueError, "run requires a script string as its only argument");
+PyObject * run (PyObject * self, PyObject * args, PyObject * kwargs) {
+  static char * kwlist[] = {"script", "id", NULL};
+  char * script = 0;
+  unsigned int messageId = 0;
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s|I", kwlist, &script, &messageId))
     return NULL;
-  }
 
-  runString(script);
+  runString(script, messageId);
 
   return Py_BuildValue("");
 }
@@ -133,11 +169,9 @@ int addModuleString (const char * moduleName, const char * script) {
 }
 
 PyObject * addModule (PyObject * self, PyObject * args) {
-  const char *moduleName, *script;
-  if (!PyArg_ParseTuple(args, "ss", &moduleName, &script)) {
-    PyErr_SetString(g_excValueError, "addModule expected args (moduleName, script)");
+  const char * moduleName, * script;
+  if (!PyArg_ParseTuple(args, "ss", &moduleName, &script))
     return NULL;
-  }
 
   if (addModuleString(moduleName, script)) {
     PyErr_SetString(g_excException, "addModule failed to add module");
@@ -147,15 +181,17 @@ PyObject * addModule (PyObject * self, PyObject * args) {
 }
 
 int removeModuleString (const char * moduleName) {
+  PyObject * nameString = PyString_FromString(moduleName);
+  PyList_Append(g_unloadedModules, nameString);
+  Py_DECREF(nameString);
+
   return PyDict_DelItemString(g_moduleDict, moduleName);
 }
 
 PyObject * removeModule (PyObject * self, PyObject * args) {
   const char *moduleName;
-  if (!PyArg_ParseTuple(args, "s", &moduleName)) {
-    PyErr_SetString(g_excValueError, "removeModule expects a module name as a string");
+  if (!PyArg_ParseTuple(args, "s", &moduleName))
     return NULL;
-  }
 
   if (removeModuleString(moduleName)) {
     PyErr_SetString(g_excException, "removeModule failed to remove module");
@@ -168,45 +204,57 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
   PyObject * moduleNames = PyMapping_Keys(g_moduleDict);
   PyObject * sysModules = PyObject_GetAttrString(g_sysModule, "modules");
 
+  PyObject * sequences[] = {
+    moduleNames, g_unloadedModules, 0
+  };
+
+  PyObject * iter = 0;
   // Unload all modules
-  PyObject * iter = PyObject_GetIter(moduleNames);
-  while (PyObject * name = PyIter_Next(iter)) {
-    PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
+  for (PyObject ** currentSequence = sequences; *currentSequence != 0; currentSequence++) {
+    iter = PyObject_GetIter(*currentSequence);
 
-    PyObject * existingModule = 0;
+    while (PyObject * name = PyIter_Next(iter)) {
+      PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
 
-    if (PyMapping_HasKey(sysModules, fullname)) {
-      existingModule = PyObject_GetItem(sysModules, fullname);
-      PyMapping_DelItem(sysModules, fullname);
-    }
-    if (PyObject_HasAttr(g_module, name)) {
-      if (!existingModule)
-        existingModule = PyObject_GetAttr(g_module, name);
-      PyObject_DelAttr(g_module, name);
-    }
+      PyObject * existingModule = 0;
 
-    // If the module was previously loaded, try and call its __unload__ handler
-    if (existingModule) {
-      if (PyObject_HasAttrString(existingModule, "__unload__")) {
-        PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
-        PyObject * args = PyTuple_New(0);
-        PyObject * result = PyObject_CallObject(unloadHandler, args);
-        if (!result)
-          errorHandler();
-        else
-          Py_DECREF(result);
-        Py_DECREF(args);
-        Py_DECREF(unloadHandler);
+      if (PyMapping_HasKey(sysModules, fullname)) {
+        existingModule = PyObject_GetItem(sysModules, fullname);
+        PyMapping_DelItem(sysModules, fullname);
       }
-      Py_DECREF(existingModule);
-    }
+      if (PyObject_HasAttr(g_module, name)) {
+        if (!existingModule)
+          existingModule = PyObject_GetAttr(g_module, name);
+        PyObject_DelAttr(g_module, name);
+      }
 
-    Py_DECREF(fullname);
-    Py_DECREF(name);
+      // If the module was previously loaded, try and call its __unload__ handler
+      if (existingModule) {
+        if (PyObject_HasAttrString(existingModule, "__unload__")) {
+          PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
+          PyObject * args = PyTuple_New(0);
+          PyObject * result = PyObject_CallObject(unloadHandler, args);
+          if (!result)
+            errorHandler();
+          else
+            Py_DECREF(result);
+          Py_DECREF(args);
+          Py_DECREF(unloadHandler);
+        }
+        Py_DECREF(existingModule);
+      }
+
+      Py_DECREF(fullname);
+      Py_DECREF(name);
+    }
+    Py_DECREF(iter);
   }
 
-  Py_DECREF(iter);
   Py_XDECREF(sysModules);
+  PyObject * newUnloadedModules = PyList_New(0);
+  PyObject_SetAttrString(g_module, "unloadedModules", newUnloadedModules);
+  Py_DECREF(g_unloadedModules);
+  g_unloadedModules = newUnloadedModules;
 
   // Import all modules
   iter = PyObject_GetIter(moduleNames);
@@ -230,12 +278,10 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
 
 PyObject * findModule (PyObject * self, PyObject * args, PyObject * kwargs) {
   static char * kwlist[] = {"fullname", "path", NULL};
-  char *moduleName = 0;
+  char * moduleName = 0;
   PyObject * path = 0;
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s|O", kwlist, &moduleName, &path)) {
-    PyErr_SetString(g_excValueError, "find_module expected (fullname, path)");
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s|O", kwlist, &moduleName, &path))
     return NULL;
-  }
 
   if (strstr(moduleName, "shootblues.") != moduleName)
     return Py_BuildValue("");
@@ -250,10 +296,8 @@ PyObject * findModule (PyObject * self, PyObject * args, PyObject * kwargs) {
 PyObject * loadModule (PyObject * self, PyObject * args) {
   // Inexplicably HasKeyString takes char* and not const char*
   char *moduleName;
-  if (!PyArg_ParseTuple(args, "s", &moduleName)) {
-    PyErr_SetString(g_excValueError, "load_module expects a module name as a string");
+  if (!PyArg_ParseTuple(args, "s", &moduleName))
     return NULL;
-  }
 
   if (strstr(moduleName, "shootblues.") != moduleName) {
     PyErr_SetString(g_excImportError, "load_module can only load child modules of shootblues");
@@ -297,8 +341,8 @@ PyObject * loadModule (PyObject * self, PyObject * args) {
 }
 
 static PyMethodDef PythonMethods[] = {
-    {"rpcSend", rpcSend, METH_VARARGS, "Send an RPC message to the parent process."},
-    {"run", run, METH_VARARGS, "Compiles and runs a script block."},
+    {"rpcSend", (PyCFunction)rpcSend, METH_KEYWORDS, "Send an RPC message to the parent process."},
+    {"run", (PyCFunction)run, METH_KEYWORDS, "Compiles and runs a script block."},
     {"addModule", addModule, METH_VARARGS, "Adds a new script module or replaces an existing script module."},
     {"removeModule", removeModule, METH_VARARGS, "Removes an existing script module."},
     {"reloadModules", reloadModules, METH_VARARGS, "Reloads all script modules."},
@@ -335,6 +379,8 @@ DWORD __stdcall payload (HWND rpcWindow) {
 
   g_moduleDict = PyDict_New();
   PyObject_SetAttrString(g_module, "modules", g_moduleDict);
+  g_unloadedModules = PyList_New(0);
+  PyObject_SetAttrString(g_module, "unloadedModules", g_unloadedModules);
 
   // Install our import hook
   g_sysModule = PyImport_ImportModule("sys");
@@ -362,7 +408,7 @@ DWORD __stdcall payload (HWND rpcWindow) {
 
     switch (rpc->type) {
       case RMT_Run:
-        runString(rpc->text);
+        runString(rpc->text, rpc->messageId);
         break;
       case RMT_AddModule:
         addModuleString(rpc->moduleName, rpc->text);
@@ -372,6 +418,9 @@ DWORD __stdcall payload (HWND rpcWindow) {
         break;
       case RMT_ReloadModules:
         reloadModules(0, 0);
+        break;
+      case RMT_CallFunction:
+        callFunction(rpc->moduleName, rpc->text, rpc->messageId);
         break;
     }
 
