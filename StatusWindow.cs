@@ -68,7 +68,7 @@ namespace ShootBlues {
             yield return f;
             byte[] result = f.Result;
             if ((result != null) && (result.Length > 0))
-                MessageBox.Show(Encoding.ASCII.GetString(result), "Result");
+                MessageBox.Show(result.DecodeAsciiZ(), "Result");
         }
 
         private void RunningProcessList_MouseDown (object sender, MouseEventArgs e) {
@@ -93,7 +93,7 @@ namespace ShootBlues {
                 if (dialog.ShowDialog() != DialogResult.OK)
                     return;
 
-                Start(AddScripts(new string[] { dialog.FileName }));
+                AddScripts(new string[] { dialog.FileName });
             }
         }
 
@@ -113,39 +113,23 @@ namespace ShootBlues {
                 if (files == null)
                     return;
 
-                Start(AddScripts(
+                AddScripts(
                     from file in files where (
                         (Path.GetExtension(file).ToLower() == ".py") ||
                         (Path.GetExtension(file).ToLower() == ".dll")
                     ) select file
-                ));
+                );
             }
         }
 
-        private IEnumerator<object> AddScripts (IEnumerable<string> filenames) {
+        private void AddScripts (IEnumerable<string> filenames) {
             foreach (var filename in filenames)
                 Program.Scripts.Add(filename);
             Program.ScriptsChanged.Set();
-
-            foreach (var pi in Program.RunningProcesses) {
-                foreach (var filename in filenames)
-                    yield return Program.LoadScriptFromFilename(pi, filename);
-
-                yield return Program.ReloadModules(pi);
-            }
         }
 
         private void ReloadAllButton_Click (object sender, EventArgs e) {
-            Start(ReloadAllScripts());
-        }
-
-        private IEnumerator<object> ReloadAllScripts () {
-            foreach (var pi in Program.RunningProcesses) {
-                foreach (var script in Program.Scripts)
-                    yield return Program.LoadScriptFromFilename(pi, script);
-
-                yield return Program.ReloadModules(pi);
-            }
+            Start(Program.ReloadAllScripts());
         }
 
         private void ScriptsList_SelectedIndexChanged (object sender, EventArgs e) {
@@ -153,18 +137,8 @@ namespace ShootBlues {
         }
 
         private void UnloadScriptButton_Click (object sender, EventArgs e) {
-            Start(RemoveScript(ScriptsList.SelectedItem as Filename));
-        }
-
-        private IEnumerator<object> RemoveScript (string filename) {
+            var filename = ScriptsList.SelectedItem as Filename;
             Program.Scripts.Remove(filename);
-
-            foreach (var pi in Program.RunningProcesses) {
-                yield return Program.UnloadScriptFromFilename(pi, filename);
-
-                yield return Program.ReloadModules(pi);
-            }
-
             Program.ScriptsChanged.Set();
         }
 

@@ -75,7 +75,7 @@ PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
   return NULL;
 }
 
-void errorHandler () {
+void errorHandler (int messageId) {
   PyObject * errType = 0, * errValue = 0, * traceback = 0;
   PyErr_Fetch(&errType, &errValue, &traceback);
   if (!errType)
@@ -97,7 +97,7 @@ void errorHandler () {
     if (exceptionString) {
       Py_XDECREF(args);
       args = PyTuple_Pack(1, exceptionString);
-      PyObject * kwargs = Py_BuildValue("{s,I}", "id", 0);
+      PyObject * kwargs = Py_BuildValue("{s,I}", "id", messageId);
       PyObject * result = rpcSend(0, args, kwargs);
       Py_XDECREF(result);
       Py_XDECREF(exceptionString);
@@ -116,12 +116,12 @@ void errorHandler () {
 void callFunction (const char * moduleName, const char * functionName, const char * argumentsJson, unsigned int messageId) {
   PyObject * module = PyObject_GetAttrString(g_module, moduleName);
   if (!module)
-    return errorHandler();
+    return errorHandler(messageId);
 
   PyObject * function = PyObject_GetAttrString(module, functionName);
   if (!function) {
     Py_DECREF(module);
-    return errorHandler();
+    return errorHandler(messageId);
   }
 
   PyObject * args;
@@ -135,7 +135,7 @@ void callFunction (const char * moduleName, const char * functionName, const cha
     Py_DECREF(args);
     Py_DECREF(argsString);
     if (!result)
-      return errorHandler();
+      return errorHandler(messageId);
     args = PySequence_Tuple(result);
     Py_DECREF(result);
   }
@@ -152,7 +152,7 @@ void callFunction (const char * moduleName, const char * functionName, const cha
     Py_DECREF(kwargs);
     Py_DECREF(resultRepr);
   } else
-    errorHandler();
+    errorHandler(messageId);
 
   Py_XDECREF(args);
   Py_XDECREF(result);
@@ -173,7 +173,7 @@ void runString (const char * script, unsigned int messageId) {
       Py_XDECREF(result);
 
       if (PyErr_Occurred())
-        errorHandler();
+        errorHandler(messageId);
     } 
 
     Py_DECREF(codeObject);
@@ -265,7 +265,7 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
           PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
           PyObject * result = PyObject_CallObject(unloadHandler, NULL);
           if (!result)
-            errorHandler();
+            errorHandler(0);
           else
             Py_DECREF(result);
           Py_DECREF(unloadHandler);
@@ -294,7 +294,7 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
     if (module)
       Py_DECREF(module);
     else
-      errorHandler();
+      errorHandler(0);
 
     Py_DECREF(fullname);
     Py_DECREF(name);
@@ -487,7 +487,7 @@ DWORD __stdcall payload (HWND rpcWindow) {
     }
 
     if (PyErr_Occurred())
-      errorHandler();
+      errorHandler(rpc->messageId);
 
     PyGILState_Release(gil);
 

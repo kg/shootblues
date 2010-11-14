@@ -7,6 +7,15 @@ using System.Windows.Forms;
 
 namespace ShootBlues {
     public interface IManagedScript : IDisposable {
+        ScriptName Name {
+            get;
+        }
+        IEnumerable<ScriptName> Dependencies {
+            get;
+        }
+
+        IEnumerator<object> Initialize ();
+        IEnumerator<object> Reload ();
         IEnumerator<object> LoadInto (ProcessInfo process);
         IEnumerator<object> LoadedInto (ProcessInfo process);
         IEnumerator<object> UnloadFrom (ProcessInfo process);

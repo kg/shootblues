@@ -6,30 +6,93 @@ using Squared.Task;
 using System.Diagnostics;
 using System.Text;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace ShootBlues {
-    public class Filename {
-        public readonly string FullPath;
+    public class ScriptName {
+        public readonly string Name;
+        public readonly string DefaultSearchPath;
 
-        private Filename (string filename) {
-            FullPath = filename;
+        public ScriptName (string name) {
+            Name = name;
+            DefaultSearchPath = null;
+        }
+
+        public ScriptName (string name, string defaultSearchPath) {
+            Name = name;
+            DefaultSearchPath = defaultSearchPath;
+        }
+
+        public static implicit operator string (ScriptName name) {
+            return name.Name;
         }
 
         public string Extension {
             get {
-                return Path.GetExtension(FullPath);
+                return Path.GetExtension(Name).ToLower();
             }
         }
 
-        public string Name {
+        public override int GetHashCode () {
+            return Name.GetHashCode();
+        }
+
+        public override string ToString () {
+            return Name;
+        }
+
+        public override bool Equals (object obj) {
+            var sn = obj as ScriptName;
+            if (sn != null)
+                return Name.Equals(sn.Name);
+            else {
+                var fn = obj as Filename;
+                if (fn != null)
+                    return Name.Equals(fn.Name.Name);
+                else {
+                    var str = obj as String;
+                    if (str != null)
+                        return Name.Equals(str);
+                    else
+                        return base.Equals(obj);
+                }
+            }
+        }
+    }
+
+    public class Filename {
+        public readonly string FullPath;
+
+        private Filename (string filename, bool resolved) {
+            if (!resolved)
+                FullPath = Path.GetFullPath(filename);
+            else
+                FullPath = filename;
+        }
+
+        public Filename (string filename)
+            : this(filename, false) {
+        }
+
+        public string Extension {
             get {
-                return Path.GetFileName(FullPath);
+                return Path.GetExtension(FullPath).ToLower();
             }
         }
 
         public string NameWithoutExtension {
             get {
                 return Path.GetFileNameWithoutExtension(FullPath);
+            }
+        }
+
+        public ScriptName Name {
+            get {
+                return new ScriptName(
+                    Path.GetFileName(FullPath),
+                    Path.GetDirectoryName(FullPath)
+                );
             }
         }
 
@@ -40,7 +103,7 @@ namespace ShootBlues {
         }
 
         public static implicit operator Filename (string filename) {
-            return new Filename(Path.GetFullPath(filename));
+            return new Filename(filename, false);
         }
 
         public static implicit operator string (Filename filename) {
@@ -74,8 +137,7 @@ namespace ShootBlues {
         public RPCChannel Channel = null;
         public string Status = "Unknown";
 
-        public HashSet<Filename> LoadedScripts = new HashSet<Filename>();
-
+        internal HashSet<ScriptName> LoadedScripts = new HashSet<ScriptName>();
         private Dictionary<string, RPCResponseChannel> NamedChannels = new Dictionary<string, RPCResponseChannel>();
         private HashSet<IFuture> OwnedFutures = new HashSet<IFuture>();
 
@@ -116,22 +178,35 @@ namespace ShootBlues {
             Channel.Dispose();
         }
 
+        public override int GetHashCode () {
+            return Process.Id.GetHashCode();
+        }
+
         public override string ToString () {
             return String.Format("{0} - {1}", Process.Id, Status);
+        }
+
+        public override bool Equals (object obj) {
+            var rhs = obj as ProcessInfo;
+            if (rhs != null) {
+                return Process.Id == rhs.Process.Id;
+            } else {
+                return base.Equals(obj);
+            }
         }
     }
 
     public static class Program {
         private static StatusWindow StatusWindowInstance = null;
         private static ContextMenuStrip TrayMenu = null;
-        private static Dictionary<string, SignalFuture> LoadingScripts = new Dictionary<string, SignalFuture>();
+        private static Dictionary<ScriptName, SignalFuture> LoadingScripts = new Dictionary<ScriptName, SignalFuture>();
+        private static Dictionary<ScriptName, IManagedScript> LoadedScripts = new Dictionary<ScriptName, IManagedScript>();
         private static int ExitCode = 0;
 
         public static readonly Signal RunningProcessesChanged = new Signal();
         public static readonly Signal ScriptsChanged = new Signal();
         public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
         public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
-        public static readonly Dictionary<Filename, IManagedScript> ManagedScripts = new Dictionary<Filename, IManagedScript>();
         public static TaskScheduler Scheduler;
 
         [STAThread]
@@ -164,11 +239,6 @@ namespace ShootBlues {
             return true;
         }
 
-        private static void AddItem (this ContextMenuStrip menu, string text, EventHandler onClick) {
-            var newItem = menu.Items.Add(text);
-            newItem.Click += onClick;
-        }
-
         private static IEnumerator<object> MainTask () {
             TrayMenu = new ContextMenuStrip();
             TrayMenu.AddItem("&Status", (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask));
@@ -186,8 +256,7 @@ namespace ShootBlues {
                 trayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
 
                 yield return new Start(
-                    ManagedScriptLoaderTask(), 
-                    TaskExecutionPolicy.RunAsBackgroundTask
+                    ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
                 );
 
                 Process newProcess = null;
@@ -232,7 +301,7 @@ namespace ShootBlues {
             }
 
             using (StatusWindowInstance = new StatusWindow(Scheduler)) {
-                foreach (var instance in ManagedScripts.Values)
+                foreach (var instance in LoadedScripts.Values)
                     yield return instance.OnStatusWindowShown(StatusWindowInstance);
 
                 if (initialPage != null)
@@ -247,15 +316,84 @@ namespace ShootBlues {
             StatusWindowInstance = null;
         }
 
-        private static IEnumerator<object> ManagedScriptLoaderTask () {
+        public static IEnumerator<object> BuildOrderedScriptList () {
+            IManagedScript instance = null;
+            var visited = new HashSet<ScriptName>();
+            var result = new List<ScriptName>();
+            var toVisit = new LinkedList<ScriptName>(
+                from fn in Scripts select fn.Name
+            );
+
+            while (toVisit.Count > 0) {
+                var current = toVisit.PopFirst();
+                Console.WriteLine("Visiting '{0}'", current);
+
+                yield return LoadScript(current);
+                if (!LoadedScripts.TryGetValue(current, out instance)) {
+                    Console.WriteLine("Skipping '{0}' due to failed load.", current);
+                    continue;
+                }
+
+                visited.Add(current);
+                var head = toVisit.First;
+
+                bool resolved = true;
+                foreach (var dep in instance.Dependencies) {
+                    if (visited.Contains(dep))
+                        continue;
+
+                    if (head != null)
+                        toVisit.AddBefore(head, dep);
+                    else
+                        toVisit.AddLast(dep);
+                    resolved = false;
+                }
+
+                if (resolved) {
+                    Console.WriteLine("'{0}' is done", current);
+                    result.Add(current);
+                } else {
+                    Console.WriteLine("'{0}' is not done yet, postponing", current);
+                    if (head != null)
+                        toVisit.AddBefore(head, current);
+                    else
+                        toVisit.AddLast(current);
+                }
+            }
+
+            Console.WriteLine(
+                "Dependency list: {0}",
+                String.Join(", ", (from sn in result select sn.Name).ToArray())
+            );
+            yield return new Result(result.ToArray());
+        }
+
+        private static IEnumerator<object> ScriptLoaderTask () {
             while (true) {
+                var buildScriptList = new RunToCompletion<ScriptName[]>(
+                    BuildOrderedScriptList(), TaskExecutionPolicy.RunWhileFutureLives
+                );
+                yield return buildScriptList;
+
+                var scriptList = buildScriptList.Result;
+
+                var loadedScriptNames = LoadedScripts.Keys.ToArray();
+                foreach (var scriptName in loadedScriptNames)
+                    if (!scriptList.Contains(scriptName))
+                        yield return UnloadScript(scriptName);
+
+                foreach (var scriptName in scriptList)
+                    if (!LoadedScripts.ContainsKey(scriptName))
+                        yield return LoadScript(scriptName);
+
+                var f = Scheduler.Start(
+                    ReloadAllScripts(scriptList), TaskExecutionPolicy.RunAsBackgroundTask
+                );
+                yield return new WaitWithTimeout(
+                    f, 15.0
+                );
+
                 yield return ScriptsChanged.Wait();
-
-                foreach (var script in Scripts)
-                    if ((script.Extension == ".dll") && !ManagedScripts.ContainsKey(script))
-                        yield return LoadManagedScript(script);
-
-                yield return UnloadDeadManagedScripts();
             }
         }
 
@@ -300,10 +438,12 @@ namespace ShootBlues {
                     pi.Status = "Loading scripts...";
                     RunningProcessesChanged.Set();
 
-                    foreach (var script in Scripts)
-                        yield return LoadScriptFromFilename(pi, script);
+                    var buildScriptList = new RunToCompletion<ScriptName[]>(
+                        BuildOrderedScriptList(), TaskExecutionPolicy.RunWhileFutureLives
+                    );
+                    yield return buildScriptList;
 
-                    yield return ReloadModules(pi);
+                    yield return LoadScriptsInto(pi, buildScriptList.Result);
 
                     pi.Status = "Scripts loaded";
                     RunningProcessesChanged.Set();
@@ -324,48 +464,118 @@ namespace ShootBlues {
             RunningProcessesChanged.Set();
         }
 
-        public static IEnumerator<object> LoadManagedScript (Filename script) {
-            IManagedScript instance;
+        public static IEnumerator<object> FindScript (ScriptName script) {
+            foreach (var filename in Scripts) {
+                if (filename.Name.Name == script.Name) {
+                    yield return new Result(filename);
+                    break;
+                }
+            }
+
+            if (script.DefaultSearchPath != null) {
+                var candidatePath = Path.Combine(
+                    script.DefaultSearchPath, script.Name
+                );
+                if (File.Exists(candidatePath))
+                    yield return new Result(new Filename(candidatePath));
+            }
+
+            using (var dialog = new OpenFileDialog()) {
+                dialog.Title = String.Format("Locate script '{0}'", script.Name);
+                dialog.Filter = String.Format("{0}|{0}|All Files|*.*", script.Name);
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    throw new Exception(String.Format(
+                        "Script '{0}' not found.", script.Name
+                    ));
+
+                yield return new Result(new Filename(
+                    dialog.FileName
+                ));
+            }
+        }
+
+        public static IEnumerator<object> LoadScript (ScriptName script) {
+            IManagedScript instance = null;
             SignalFuture loadFuture;
             if (LoadingScripts.TryGetValue(script, out loadFuture)) {
                 yield return loadFuture;
                 yield break;
-            } else if (ManagedScripts.TryGetValue(script, out instance)) {
+            } else if (LoadedScripts.TryGetValue(script, out instance)) {
                 yield break;
             } else {
                 LoadingScripts[script] = loadFuture = new SignalFuture();
             }
 
-            var fAssembly = Future.RunInThread(() =>
-                Assembly.LoadFile(script)
+            var fScriptPath = new RunToCompletion<Filename>(
+                FindScript(script), TaskExecutionPolicy.RunWhileFutureLives
             );
-            yield return fAssembly;
+            yield return fScriptPath;
+            var scriptPath = fScriptPath.Result;
 
-            var fTypes = Future.RunInThread(() => fAssembly.Result.GetTypes());
-            yield return fTypes;
+            if (script.Extension == ".py") {
+                instance = new PythonScript(scriptPath);
+            } else if (script.Extension == ".dll") {
+                var fAssembly = Future.RunInThread(() =>
+                    Assembly.LoadFile(scriptPath)
+                );
+                yield return fAssembly;
 
-            var managedScript = typeof(IManagedScript);
-            foreach (var type in fTypes.Result) {
-                if (!managedScript.IsAssignableFrom(type))
-                    continue;
+                var fTypes = Future.RunInThread(() => fAssembly.Result.GetTypes());
+                yield return fTypes;
 
-                var constructor = type.GetConstructor(new Type[0]);
-                instance = constructor.Invoke(null) as IManagedScript;
+                var managedScript = typeof(IManagedScript);
+                foreach (var type in fTypes.Result) {
+                    if (!managedScript.IsAssignableFrom(type))
+                        continue;
 
-                ManagedScripts[script] = instance;
-                LoadingScripts.Remove(script);
-                loadFuture.Complete();
+                    var constructor = type.GetConstructor(new Type[] { typeof(ScriptName) });
+                    instance = constructor.Invoke(new object[] {
+                        scriptPath.Name
+                    }) as IManagedScript;
 
-                if (StatusWindowInstance != null)
-                    yield return instance.OnStatusWindowShown(StatusWindowInstance);
+                    break;
+                }
+            }
 
+            if (instance == null) {
+                MessageBox.Show(String.Format("The file '{0}' is not a Shoot Blues script.", script), "Error");
                 yield break;
             }
 
-            MessageBox.Show(String.Format("The file '{0}' is not a Shoot Blues script.", script), "Error");
+            yield return instance.Initialize();
+
+            LoadedScripts[script] = instance;
+            LoadingScripts.Remove(script);
+            loadFuture.Complete();
+
+            if (StatusWindowInstance != null)
+                yield return instance.OnStatusWindowShown(StatusWindowInstance);
         }
 
-        public static IEnumerator<object> LoadScriptFromString (ProcessInfo pi, string moduleName, string scriptText) {
+        public static IEnumerator<object> UnloadScript (ScriptName script) {
+            IManagedScript instance = null;
+            SignalFuture loadFuture;
+
+            if (LoadingScripts.TryGetValue(script, out loadFuture)) {
+                loadFuture.Dispose();
+                LoadingScripts.Remove(script);
+            } else if (LoadedScripts.TryGetValue(script, out instance)) {
+                if (StatusWindowInstance != null)
+                    yield return instance.OnStatusWindowHidden(StatusWindowInstance);
+
+                foreach (var pi in RunningProcesses) {
+                    if (pi.LoadedScripts.Contains(script)) {
+                        yield return instance.UnloadFrom(pi);
+                        pi.LoadedScripts.Remove(script);
+                    }
+                }
+
+                instance.Dispose();
+                LoadedScripts.Remove(script);
+            }
+        }
+
+        public static IEnumerator<object> LoadPythonScript (ProcessInfo pi, string moduleName, string scriptText) {
             yield return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.AddModule,
@@ -375,77 +585,13 @@ namespace ShootBlues {
             );
         }
 
-        public static IEnumerator<object> LoadScriptFromFilename (ProcessInfo pi, Filename script) {
-            if (pi.LoadedScripts.Contains(script))
-                yield break;
-
-            if (script.Extension == ".py") {
-                var fScript = Future.RunInThread(() =>
-                    File.ReadAllText(script)
-                );
-                yield return fScript;
-
-                var moduleName = script.NameWithoutExtension;
-                pi.LoadedScripts.Add(script);
-                yield return LoadScriptFromString(pi, moduleName, fScript.Result);
-
-            } else {
-                IManagedScript instance;
-                if (!ManagedScripts.TryGetValue(script, out instance)) {
-                    yield return LoadManagedScript(script);
-                    instance = ManagedScripts[script];
-                }
-
-                pi.LoadedScripts.Add(script);
-                yield return instance.LoadInto(pi);
-            }
-        }
-
-        public static IEnumerator<object> UnloadScriptFromModuleName (ProcessInfo pi, string moduleName) {
+        public static IEnumerator<object> UnloadPythonScript (ProcessInfo pi, string moduleName) {
             yield return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.RemoveModule,
                     ModuleName = moduleName
                 })
             );
-        }
-
-        public static IEnumerator<object> UnloadScriptFromFilename (ProcessInfo pi, Filename script) {
-            if (script.Extension == ".py") {
-                yield return UnloadScriptFromModuleName(
-                    pi, 
-                    script.NameWithoutExtension
-                );
-            } else {
-                if (pi.LoadedScripts.Contains(script)) {
-                    var instance = ManagedScripts[script];
-
-                    pi.LoadedScripts.Remove(script);
-                    yield return instance.UnloadFrom(pi);
-                }
-            }
-        }
-
-        public static IEnumerator<object> UnloadDeadManagedScripts () {
-            var keys = new Filename[ManagedScripts.Count];
-            ManagedScripts.Keys.CopyTo(keys, 0);
-
-            foreach (var key in keys) {
-                bool inUse = Scripts.Contains(key);
-
-                if (!inUse)
-                    foreach (var pi in RunningProcesses)
-                        if (pi.LoadedScripts.Contains(key))
-                            inUse = true;
-
-                if (!inUse) {
-                    if (StatusWindowInstance != null)
-                        yield return ManagedScripts[key].OnStatusWindowHidden(StatusWindowInstance);
-
-                    ManagedScripts[key].Dispose();
-                    ManagedScripts.Remove(key);
-                }
-            }
         }
 
         public static Future<byte[]> EvalPython (ProcessInfo process, string pythonText) {
@@ -486,16 +632,46 @@ rpcSend(result, id={1}L)", pythonText, messageID
             }, true);
         }
 
-        public static IEnumerator<object> ReloadModules (ProcessInfo pi) {
-            yield return UnloadDeadManagedScripts();
+        public static IEnumerator<object> ReloadAllScripts () {
+            var buildScriptList = new RunToCompletion<ScriptName[]>(
+                BuildOrderedScriptList(), TaskExecutionPolicy.RunWhileFutureLives
+            );
+            yield return buildScriptList;
+            var scriptList = buildScriptList.Result;
+
+            yield return ReloadAllScripts(scriptList);
+        }
+
+        private static IEnumerator<object> ReloadAllScripts (ScriptName[] scriptList) {
+            foreach (var pi in RunningProcesses) {
+                foreach (var scriptName in scriptList.Reverse()) {
+                    if (pi.LoadedScripts.Contains(scriptName)) {
+                        yield return LoadedScripts[scriptName].UnloadFrom(pi);
+                        pi.LoadedScripts.Remove(scriptName);
+                    }
+                }
+            }
+
+            foreach (var scriptName in scriptList)
+                yield return LoadedScripts[scriptName].Reload();
+
+            foreach (var pi in RunningProcesses)
+                yield return LoadScriptsInto(pi, scriptList);
+        }
+
+        private static IEnumerator<object> LoadScriptsInto (ProcessInfo pi, ScriptName[] scriptList) {
+            foreach (var script in scriptList) {
+                yield return LoadedScripts[script].LoadInto(pi);
+                pi.LoadedScripts.Add(script);
+            }
 
             yield return Future.RunInThread(() =>
                 pi.Channel.Send(new RPCMessage {
                     Type = RPCMessageType.ReloadModules
                 }));
 
-            foreach (var instance in ManagedScripts.Values)
-                yield return instance.LoadedInto(pi);
+            foreach (var script in scriptList)
+                yield return LoadedScripts[script].LoadedInto(pi);
         }
 
         private static IEnumerator<object> RPCTask (ProcessInfo pi) {
@@ -503,9 +679,27 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 var fMessage = pi.Channel.Receive();
                 yield return fMessage;
 
-                var errorText = Encoding.ASCII.GetString(fMessage.Result);
-                MessageBox.Show(errorText, String.Format("Error in process {0}", pi.Process.Id));
+                var errorText = fMessage.Result.DecodeAsciiZ();
+                MessageBox.Show(errorText, String.Format("Message from process {0}", pi.Process.Id));
             }
+        }
+    }
+
+    public static class Extensions {
+        public static void AddItem (this ContextMenuStrip menu, string text, EventHandler onClick) {
+            var newItem = menu.Items.Add(text);
+            newItem.Click += onClick;
+        }
+
+        public static string DecodeAsciiZ (this byte[] buffer) {
+            int firstNull = Array.IndexOf(buffer, (byte)0, 0);
+            return Encoding.ASCII.GetString(buffer, 0, firstNull);
+        }
+
+        public static T PopFirst<T> (this LinkedList<T> list) {
+            var result = list.First.Value;
+            list.RemoveFirst();
+            return result;
         }
     }
 }
