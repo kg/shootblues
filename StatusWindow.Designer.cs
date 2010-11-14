@@ -29,7 +29,8 @@
             this.RunningProcessList = new System.Windows.Forms.ListBox();
             this.Tabs = new System.Windows.Forms.TabControl();
             this.ScriptsPage = new System.Windows.Forms.TabPage();
-            this.ScriptsList = new System.Windows.Forms.ListBox();
+            this.ScriptsList = new System.Windows.Forms.TreeView();
+            this.ScriptImageList = new System.Windows.Forms.ImageList(this.components);
             this.ReloadAllButton = new System.Windows.Forms.Button();
             this.UnloadScriptButton = new System.Windows.Forms.Button();
             this.LoadScriptButton = new System.Windows.Forms.Button();
@@ -105,24 +106,34 @@
             this.ScriptsList.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
                         | System.Windows.Forms.AnchorStyles.Left)
                         | System.Windows.Forms.AnchorStyles.Right)));
-            this.ScriptsList.FormattingEnabled = true;
-            this.ScriptsList.IntegralHeight = false;
-            this.ScriptsList.ItemHeight = 16;
+            this.ScriptsList.FullRowSelect = true;
+            this.ScriptsList.HideSelection = false;
+            this.ScriptsList.ImageIndex = 0;
+            this.ScriptsList.ImageList = this.ScriptImageList;
             this.ScriptsList.Location = new System.Drawing.Point(6, 6);
             this.ScriptsList.Name = "ScriptsList";
-            this.ScriptsList.Size = new System.Drawing.Size(460, 234);
-            this.ScriptsList.Sorted = true;
-            this.ScriptsList.TabIndex = 0;
-            this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
-            this.ScriptsList.SelectedIndexChanged += new System.EventHandler(this.ScriptsList_SelectedIndexChanged);
+            this.ScriptsList.SelectedImageIndex = 0;
+            this.ScriptsList.ShowNodeToolTips = true;
+            this.ScriptsList.ShowPlusMinus = false;
+            this.ScriptsList.ShowRootLines = false;
+            this.ScriptsList.Size = new System.Drawing.Size(462, 239);
+            this.ScriptsList.TabIndex = 4;
             this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
+            this.ScriptsList.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.ScriptsList_AfterSelect);
+            this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
+            // 
+            // ScriptImageList
+            // 
+            this.ScriptImageList.ColorDepth = System.Windows.Forms.ColorDepth.Depth32Bit;
+            this.ScriptImageList.ImageSize = new System.Drawing.Size(16, 16);
+            this.ScriptImageList.TransparentColor = System.Drawing.Color.Transparent;
             // 
             // ReloadAllButton
             // 
             this.ReloadAllButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.ReloadAllButton.Image = ((System.Drawing.Image)(resources.GetObject("ReloadAllButton.Image")));
             this.ReloadAllButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.ReloadAllButton.Location = new System.Drawing.Point(367, 246);
+            this.ReloadAllButton.Location = new System.Drawing.Point(366, 251);
             this.ReloadAllButton.Name = "ReloadAllButton";
             this.ReloadAllButton.Size = new System.Drawing.Size(100, 27);
             this.ReloadAllButton.TabIndex = 3;
@@ -137,7 +148,7 @@
             this.UnloadScriptButton.Enabled = false;
             this.UnloadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("UnloadScriptButton.Image")));
             this.UnloadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.UnloadScriptButton.Location = new System.Drawing.Point(137, 246);
+            this.UnloadScriptButton.Location = new System.Drawing.Point(137, 250);
             this.UnloadScriptButton.Name = "UnloadScriptButton";
             this.UnloadScriptButton.Size = new System.Drawing.Size(125, 27);
             this.UnloadScriptButton.TabIndex = 2;
@@ -151,7 +162,7 @@
             this.LoadScriptButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.LoadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("LoadScriptButton.Image")));
             this.LoadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.LoadScriptButton.Location = new System.Drawing.Point(6, 246);
+            this.LoadScriptButton.Location = new System.Drawing.Point(6, 251);
             this.LoadScriptButton.Name = "LoadScriptButton";
             this.LoadScriptButton.Size = new System.Drawing.Size(125, 27);
             this.LoadScriptButton.TabIndex = 1;
@@ -218,9 +229,10 @@
         private System.Windows.Forms.ImageList ImageList;
         private System.Windows.Forms.ContextMenuStrip ProcessMenu;
         private System.Windows.Forms.ToolStripMenuItem EvalPythonMenu;
-        private System.Windows.Forms.ListBox ScriptsList;
         private System.Windows.Forms.ContextMenuStrip LoadScriptMenu;
         public System.Windows.Forms.TabControl Tabs;
+        private System.Windows.Forms.TreeView ScriptsList;
+        private System.Windows.Forms.ImageList ScriptImageList;
     }
 }
 

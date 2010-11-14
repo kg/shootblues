@@ -28,6 +28,12 @@ namespace ShootBlues {
             return name.Name;
         }
 
+        public string NameWithoutExtension {
+            get {
+                return Path.GetFileNameWithoutExtension(Name);
+            }
+        }
+
         public string Extension {
             get {
                 return Path.GetExtension(Name).ToLower();
@@ -200,8 +206,9 @@ namespace ShootBlues {
         private static StatusWindow StatusWindowInstance = null;
         private static ContextMenuStrip TrayMenu = null;
         private static Dictionary<ScriptName, SignalFuture> LoadingScripts = new Dictionary<ScriptName, SignalFuture>();
-        private static Dictionary<ScriptName, IManagedScript> LoadedScripts = new Dictionary<ScriptName, IManagedScript>();
         private static int ExitCode = 0;
+
+        internal static Dictionary<ScriptName, IManagedScript> LoadedScripts = new Dictionary<ScriptName, IManagedScript>();
 
         public static readonly Signal RunningProcessesChanged = new Signal();
         public static readonly Signal ScriptsChanged = new Signal();
@@ -326,6 +333,10 @@ namespace ShootBlues {
 
             while (toVisit.Count > 0) {
                 var current = toVisit.PopFirst();
+
+                if (result.Contains(current))
+                    continue;
+
                 Console.WriteLine("Visiting '{0}'", current);
 
                 yield return LoadScript(current);
@@ -392,6 +403,9 @@ namespace ShootBlues {
                 yield return new WaitWithTimeout(
                     f, 15.0
                 );
+
+                // Dirty trick to make other subscribers refresh their status
+                ScriptsChanged.Set();
 
                 yield return ScriptsChanged.Wait();
             }
@@ -464,21 +478,27 @@ namespace ShootBlues {
             RunningProcessesChanged.Set();
         }
 
-        public static IEnumerator<object> FindScript (ScriptName script) {
-            foreach (var filename in Scripts) {
-                if (filename.Name.Name == script.Name) {
-                    yield return new Result(filename);
-                    break;
-                }
-            }
+        public static Filename FindScript (ScriptName script) {
+            foreach (var filename in Scripts)
+                if (filename.Name.Name == script.Name)
+                    return filename;
 
             if (script.DefaultSearchPath != null) {
                 var candidatePath = Path.Combine(
                     script.DefaultSearchPath, script.Name
                 );
                 if (File.Exists(candidatePath))
-                    yield return new Result(new Filename(candidatePath));
+                    return new Filename(candidatePath);
             }
+
+            return null;
+        }
+
+        public static IEnumerator<object> FindScriptInteractive (ScriptName script) {
+            var filename = FindScript(script);
+
+            if (filename != null)
+                yield return new Result(filename);
 
             using (var dialog = new OpenFileDialog()) {
                 dialog.Title = String.Format("Locate script '{0}'", script.Name);
@@ -507,13 +527,13 @@ namespace ShootBlues {
             }
 
             var fScriptPath = new RunToCompletion<Filename>(
-                FindScript(script), TaskExecutionPolicy.RunWhileFutureLives
+                FindScriptInteractive(script), TaskExecutionPolicy.RunWhileFutureLives
             );
             yield return fScriptPath;
             var scriptPath = fScriptPath.Result;
 
             if (script.Extension == ".py") {
-                instance = new PythonScript(scriptPath);
+                instance = new PythonScript(scriptPath.Name);
             } else if (script.Extension == ".dll") {
                 var fAssembly = Future.RunInThread(() =>
                     Assembly.LoadFile(scriptPath)

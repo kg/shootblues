@@ -29,27 +29,58 @@ namespace ShootBlues {
             }
         }
 
+        private TreeNode BuildScriptNode (ScriptName script) {
+            var filename = Program.FindScript(script);
+
+            var item = new TreeNode();
+            item.Text = filename ?? script.Name;
+            item.Tag = filename;
+
+            if ((filename != null) && (!ScriptImageList.Images.ContainsKey(filename))) {
+                Icon icon = Squared.Util.IO.ExtractAssociatedIcon(filename, false);
+                if (icon != null) {
+                    ScriptImageList.Images.Add(filename, icon);
+                }
+            }
+            item.SelectedImageKey = item.ImageKey = filename;
+
+            IManagedScript instance;
+            if (Program.LoadedScripts.TryGetValue(script, out instance)) {
+                foreach (var dep in instance.Dependencies)
+                    item.Nodes.Add(BuildScriptNode(dep));
+
+                if (item.Nodes.Count > 0)
+                    item.Expand();
+            }
+
+            return item;
+        }
+
         public IEnumerator<object> ShowScriptList () {
             Filename selectedScript;
 
             while (true) {
-                if (ScriptsList.SelectedItems.Count > 0)
-                    selectedScript = ScriptsList.SelectedItem as Filename;
+                if (ScriptsList.SelectedNode != null)
+                    selectedScript = ScriptsList.SelectedNode.Tag as Filename;
                 else
                     selectedScript = null;
 
                 ScriptsList.BeginUpdate();
-                ScriptsList.Items.Clear();
-                foreach (var script in Program.Scripts)
-                    ScriptsList.Items.Add(script);
-                try {
-                    ScriptsList.SelectedItem = selectedScript;
-                } catch {
-                    ScriptsList.SelectedItem = null;
+                ScriptsList.Nodes.Clear();
+                ScriptImageList.Images.Clear();
+
+                foreach (var script in Program.Scripts) {
+                    var item = BuildScriptNode(script.Name);
+
+                    ScriptsList.Nodes.Add(item);
+                    if (script == selectedScript)
+                        ScriptsList.SelectedNode = item;
                 }
+
                 ScriptsList.EndUpdate();
 
-                UnloadScriptButton.Enabled = (ScriptsList.SelectedItem != null);
+                UnloadScriptButton.Enabled = (ScriptsList.SelectedNode != null) &&
+                    (ScriptsList.SelectedNode.Parent == null);
 
                 yield return Program.ScriptsChanged.Wait();
             }
@@ -132,12 +163,8 @@ namespace ShootBlues {
             Start(Program.ReloadAllScripts());
         }
 
-        private void ScriptsList_SelectedIndexChanged (object sender, EventArgs e) {
-            UnloadScriptButton.Enabled = (ScriptsList.SelectedItem != null);
-        }
-
         private void UnloadScriptButton_Click (object sender, EventArgs e) {
-            var filename = ScriptsList.SelectedItem as Filename;
+            var filename = ScriptsList.SelectedNode.Tag as Filename;
             Program.Scripts.Remove(filename);
             Program.ScriptsChanged.Set();
         }
@@ -162,6 +189,11 @@ namespace ShootBlues {
 
         public void HideConfigurationPanel (string title) {
             Tabs.TabPages.RemoveByKey(title);
+        }
+
+        private void ScriptsList_AfterSelect (object sender, TreeViewEventArgs e) {
+            UnloadScriptButton.Enabled = (ScriptsList.SelectedNode != null) && 
+                (ScriptsList.SelectedNode.Parent == null);
         }
     }
 }

@@ -7,14 +7,10 @@ using System.IO;
 
 namespace ShootBlues {
     public class PythonScript : ManagedScript {
-        public readonly Filename Script;
-
         private string ScriptText = null;
 
-        public PythonScript (Filename script) 
-            : base (script.Name) {
-
-            Script = script;
+        public PythonScript (ScriptName name)
+            : base(name) {
         }
 
         public override IEnumerator<object> Initialize () {
@@ -24,8 +20,10 @@ namespace ShootBlues {
         public override IEnumerator<object> Reload () {
             ScriptText = null;
 
+            var filename = Program.FindScript(Name);
+
             var fText = Future.RunInThread(
-                () => File.ReadAllText(Script.FullPath)
+                () => File.ReadAllText(filename.FullPath)
             );
             yield return fText;
 
@@ -37,13 +35,13 @@ namespace ShootBlues {
                 yield return Reload();
 
             yield return Program.LoadPythonScript(
-                process, Script.NameWithoutExtension, ScriptText
+                process, Name.NameWithoutExtension, ScriptText
             );
         }
 
         public override IEnumerator<object> UnloadFrom (ProcessInfo process) {
             yield return Program.UnloadPythonScript(
-                process, Script.NameWithoutExtension
+                process, Name.NameWithoutExtension
             );
         }
     }
