@@ -246,6 +246,9 @@ namespace ShootBlues {
                     Application.Run();
                     fMainTask.Dispose();
                 }
+
+                using (var fTeardownTask = Scheduler.Start(Teardown(), TaskExecutionPolicy.RunAsBackgroundTask))
+                    Application.Run();
             }
 
             Environment.Exit(ExitCode);
@@ -289,6 +292,37 @@ namespace ShootBlues {
                     trayIcon.Visible = false;
                 }
             }
+        }
+
+        public static IEnumerator<object> Teardown () {
+            Console.WriteLine("Shutting down...");
+
+            foreach (var process in RunningProcesses) {
+                Console.WriteLine("Unloading scripts from process {0}...", process.Process.Id);
+
+                foreach (var scriptName in process.LoadedScripts)
+                    yield return LoadedScripts[scriptName].UnloadFrom(process);
+
+                yield return Future.RunInThread(() =>
+                    process.Channel.Send(new RPCMessage {
+                        Type = RPCMessageType.ReloadModules
+                    }));
+                
+                process.LoadedScripts.Clear();
+                process.Dispose();
+            }
+
+            RunningProcesses.Clear();
+
+            Console.WriteLine("Destroying scripts...");
+
+            foreach (var script in LoadedScripts.Values)
+                script.Dispose();
+
+            LoadedScripts.Clear();
+
+            Console.WriteLine("Done shutting down.");
+            Application.Exit();
         }
 
         private static IEnumerator<object> LoadProfile () {
@@ -412,8 +446,6 @@ namespace ShootBlues {
                 if (result.Contains(current))
                     continue;
 
-                Console.WriteLine("Visiting '{0}'", current);
-
                 yield return LoadScript(current);
                 if (!LoadedScripts.TryGetValue(current, out instance)) {
                     Console.WriteLine("Skipping '{0}' due to failed load.", current);
@@ -436,10 +468,8 @@ namespace ShootBlues {
                 }
 
                 if (resolved) {
-                    Console.WriteLine("'{0}' is done", current);
                     result.Add(current);
                 } else {
-                    Console.WriteLine("'{0}' is not done yet, postponing", current);
                     if (head != null)
                         toVisit.AddBefore(head, current);
                     else
