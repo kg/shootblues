@@ -69,6 +69,7 @@
     <Compile Include="Interfaces.cs" />
     <Compile Include="ManagedScript.cs" />
     <Compile Include="PythonScript.cs" />
+    <Compile Include="SimpleExecutableProfile.cs" />
     <Compile Include="StatusWindow.cs">
       <SubType>Form</SubType>
     </Compile>

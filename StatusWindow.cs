@@ -14,7 +14,9 @@ namespace ShootBlues {
             : base(scheduler) {
             InitializeComponent();
 
-            Text = Text.Replace("$version", String.Format("v{0}", Application.ProductVersion));
+            Text = Text.Replace(
+                "$version", String.Format("v{0}", Application.ProductVersion)
+            ).Replace("$profile", Program.Profile.Name);
         }
 
         public IEnumerator<object> ShowProcessList () {
@@ -118,7 +120,7 @@ namespace ShootBlues {
         private void LoadScriptButton_Click (object sender, EventArgs e) {
             using (var dialog = new OpenFileDialog()) {
                 dialog.Title = "Load Script";
-                dialog.Filter = "All Scripts|*.dll;*.py|Managed Scripts|*.dll|Python Scripts|*.py";
+                dialog.Filter = "All Scripts|*.script.dll;*.py|Managed Scripts|*.script.dll|Python Scripts|*.py";
                 dialog.CheckFileExists = true;
 
                 if (dialog.ShowDialog() != DialogResult.OK)

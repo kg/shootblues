@@ -28,4 +28,12 @@ namespace ShootBlues {
         void HideConfigurationPanel (TabPage page);
         void HideConfigurationPanel (string name);
     }
+
+    public interface IProfile : IDisposable {
+        string Name {
+            get;
+        }
+
+        IEnumerator<object> Run ();
+    }
 }

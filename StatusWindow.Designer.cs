@@ -116,7 +116,7 @@
             this.ScriptsList.ShowNodeToolTips = true;
             this.ScriptsList.ShowPlusMinus = false;
             this.ScriptsList.ShowRootLines = false;
-            this.ScriptsList.Size = new System.Drawing.Size(462, 239);
+            this.ScriptsList.Size = new System.Drawing.Size(462, 237);
             this.ScriptsList.TabIndex = 4;
             this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
             this.ScriptsList.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.ScriptsList_AfterSelect);
@@ -133,7 +133,7 @@
             this.ReloadAllButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.ReloadAllButton.Image = ((System.Drawing.Image)(resources.GetObject("ReloadAllButton.Image")));
             this.ReloadAllButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.ReloadAllButton.Location = new System.Drawing.Point(366, 251);
+            this.ReloadAllButton.Location = new System.Drawing.Point(366, 249);
             this.ReloadAllButton.Name = "ReloadAllButton";
             this.ReloadAllButton.Size = new System.Drawing.Size(100, 27);
             this.ReloadAllButton.TabIndex = 3;
@@ -148,7 +148,7 @@
             this.UnloadScriptButton.Enabled = false;
             this.UnloadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("UnloadScriptButton.Image")));
             this.UnloadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.UnloadScriptButton.Location = new System.Drawing.Point(137, 250);
+            this.UnloadScriptButton.Location = new System.Drawing.Point(137, 248);
             this.UnloadScriptButton.Name = "UnloadScriptButton";
             this.UnloadScriptButton.Size = new System.Drawing.Size(125, 27);
             this.UnloadScriptButton.TabIndex = 2;
@@ -162,7 +162,7 @@
             this.LoadScriptButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.LoadScriptButton.Image = ((System.Drawing.Image)(resources.GetObject("LoadScriptButton.Image")));
             this.LoadScriptButton.ImageAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.LoadScriptButton.Location = new System.Drawing.Point(6, 251);
+            this.LoadScriptButton.Location = new System.Drawing.Point(6, 249);
             this.LoadScriptButton.Name = "LoadScriptButton";
             this.LoadScriptButton.Size = new System.Drawing.Size(125, 27);
             this.LoadScriptButton.TabIndex = 1;
@@ -208,7 +208,7 @@
             this.MinimumSize = new System.Drawing.Size(401, 300);
             this.Name = "StatusWindow";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Shoot Blues $version";
+            this.Text = "Shoot Blues $version - $profile";
             this.Shown += new System.EventHandler(this.StatusWindow_Shown);
             this.RunningProcessGroupBox.ResumeLayout(false);
             this.Tabs.ResumeLayout(false);

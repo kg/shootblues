@@ -214,6 +214,7 @@ namespace ShootBlues {
         public static readonly Signal ScriptsChanged = new Signal();
         public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
         public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
+        public static IProfile Profile;
         public static TaskScheduler Scheduler;
 
         [STAThread]
@@ -256,25 +257,89 @@ namespace ShootBlues {
             using (var trayIcon = new NotifyIcon {
                 Text = "Shoot Blues v" + Application.ProductVersion,
                 Icon = Properties.Resources.icon,
-                Visible = true,
                 ContextMenuStrip = TrayMenu
-            })
-            using (var pw = new ProcessWatcher("python.exe")) {
+            }) {
                 trayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
 
                 yield return new Start(
                     ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
                 );
 
-                Process newProcess = null;
-                while (true) {
-                    yield return pw.NewProcesses.Dequeue().Bind(() => newProcess);
+                RunToCompletion<IProfile> loadProfile = new RunToCompletion<IProfile>(
+                    LoadProfile(), TaskExecutionPolicy.RunAsBackgroundTask
+                );
+                yield return loadProfile;
 
-                    yield return new Start(
-                        ProcessTask(newProcess), TaskExecutionPolicy.RunAsBackgroundTask
+                using (Profile = loadProfile.Result)
+                try {
+                    trayIcon.Text = trayIcon.Text + " - " + Profile.Name;
+                    trayIcon.Visible = true;
+                    yield return Profile.Run();
+                } finally {
+                    trayIcon.Visible = false;
+                }
+            }
+        }
+
+        private static IEnumerator<object> LoadProfile () {
+            IProfile instance = null;
+
+            string profilePath = null;
+            {
+                var args = Environment.GetCommandLineArgs();
+                if (args.Length > 1)
+                    profilePath = args[1];
+            }
+            bool validProfile = false;
+            try {
+                validProfile = (profilePath != null) && File.Exists(profilePath);
+            } catch {
+            }
+
+            while (instance == null) {
+                if (!validProfile)
+                using (var dialog = new OpenFileDialog()) {
+                    dialog.Title = "Select Profile";
+                    dialog.Filter = "Shoot Blues Profiles|*.profile.dll";
+                    dialog.InitialDirectory = Path.GetDirectoryName(Application.ExecutablePath);
+
+                    if (dialog.ShowDialog() != DialogResult.OK) {
+                        Application.Exit();
+                        yield break;
+                    }
+
+                    profilePath = dialog.FileName;
+                }
+
+                var fAssembly = Future.RunInThread(() =>
+                    Assembly.LoadFile(profilePath)
+                );
+                yield return fAssembly;
+
+                var fTypes = Future.RunInThread(() => fAssembly.Result.GetTypes());
+                yield return fTypes;
+
+                var profileInterface = typeof(IProfile);
+                foreach (var type in fTypes.Result) {
+                    if (!profileInterface.IsAssignableFrom(type))
+                        continue;
+
+                    var constructor = type.GetConstructor(new Type[0]);
+                    instance = constructor.Invoke(null) as IProfile;
+
+                    break;
+                }
+
+                if (instance == null) {
+                    validProfile = false;
+                    MessageBox.Show(
+                        String.Format("The file '{0}' is not a valid profile.", profilePath),
+                        "Error"
                     );
                 }
             }
+
+            yield return new Result(instance);
         }
 
         public static void AddCustomMenu (ToolStripMenuItem menu) {
@@ -411,7 +476,7 @@ namespace ShootBlues {
             }
         }
 
-        private static IEnumerator<object> ProcessTask (Process process) {
+        public static IEnumerator<object> NotifyNewProcess (Process process) {
             var payload = Future.RunInThread(() => {
                 using (var payloadStream = Assembly.GetExecutingAssembly().
                     GetManifestResourceStream("ShootBlues.payload.dll")) {
@@ -502,7 +567,8 @@ namespace ShootBlues {
 
             using (var dialog = new OpenFileDialog()) {
                 dialog.Title = String.Format("Locate script '{0}'", script.Name);
-                dialog.Filter = String.Format("{0}|{0}|All Files|*.*", script.Name);
+                dialog.Filter = String.Format("{0}|{0}|All Scripts|*.script.dll;*.py", script.Name);
+                dialog.InitialDirectory = Path.GetDirectoryName(Application.ExecutablePath);
                 if (dialog.ShowDialog() != DialogResult.OK)
                     throw new Exception(String.Format(
                         "Script '{0}' not found.", script.Name
