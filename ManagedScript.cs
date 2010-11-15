@@ -2,10 +2,15 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Squared.Task;
+using System.Web.Script.Serialization;
 
 namespace ShootBlues {
     public abstract class ManagedScript : IManagedScript {
         protected HashSet<ScriptName> _Dependencies = new HashSet<ScriptName>();
+        protected Dictionary<string, object> _Preferences = new Dictionary<string, object>();
+        protected Signal _PreferencesChanged = new Signal();
+        protected IFuture _PreferencesTask;
 
         public ScriptName Name {
             get;
@@ -14,6 +19,8 @@ namespace ShootBlues {
 
         public ManagedScript (ScriptName name) {
             Name = name;
+
+            _PreferencesTask = Program.Scheduler.Start(PreferencesTask(), TaskExecutionPolicy.RunAsBackgroundTask);
         }
 
         public IEnumerable<ScriptName> Dependencies {
@@ -22,6 +29,20 @@ namespace ShootBlues {
 
         protected void AddDependency (string name) {
             _Dependencies.Add(new ScriptName(name, Name.DefaultSearchPath));
+        }
+
+        public void SetPreference (string name, object value) {
+            _Preferences[name] = value;
+            _PreferencesChanged.Set();
+        }
+
+        public bool GetPreference (string name, out object value) {
+            return _Preferences.TryGetValue(name, out value);
+        }
+
+        public string GetPreferencesJson () {
+            var serializer = new JavaScriptSerializer();
+            return serializer.Serialize(_Preferences);
         }
 
         public virtual IEnumerator<object> Initialize () {
@@ -52,7 +73,25 @@ namespace ShootBlues {
             yield break;
         }
 
+        protected IEnumerator<object> PreferencesTask () {
+            while (true) {
+                yield return _PreferencesChanged.Wait();
+
+                yield return new Start(
+                    OnPreferencesChanged(), TaskExecutionPolicy.RunAsBackgroundTask
+                );
+            }
+        }
+
+        protected virtual IEnumerator<object> OnPreferencesChanged () {
+            yield break;
+        }
+
         public virtual void Dispose () {
+            if (_PreferencesTask != null) {
+                _PreferencesTask.Dispose();
+                _PreferencesTask = null;
+            }
         }
     }
 }
