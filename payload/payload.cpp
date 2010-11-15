@@ -132,19 +132,19 @@ void callFunction (const char * moduleName, const char * functionName, const cha
     PyObject * argsString = PyString_FromString(argumentsJson);
     args = PyTuple_Pack(1, argsString);
     PyObject * result = PyObject_CallObject(loads, args);
-    Py_DECREF(args);
-    Py_DECREF(argsString);
+    Py_XDECREF(args);
+    Py_XDECREF(argsString);
     if (!result)
       return errorHandler(messageId);
     args = PySequence_Tuple(result);
-    Py_DECREF(result);
+    Py_XDECREF(result);
   }
 
   PyObject * result = PyObject_CallObject(function, args);
 
   if (result) {
     PyObject * resultRepr = PyObject_Repr(result);
-    Py_DECREF(args);
+    Py_XDECREF(args);
     args = PyTuple_Pack(1, resultRepr);
     PyObject * kwargs = Py_BuildValue("{s:I}", "id", messageId);
     Py_DECREF(result);

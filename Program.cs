@@ -8,20 +8,24 @@ using System.Text;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Web.Script.Serialization;
 
 namespace ShootBlues {
     public class ScriptName {
         public readonly string Name;
         public readonly string DefaultSearchPath;
+        private readonly string Invariant;
 
         public ScriptName (string name) {
             Name = name;
             DefaultSearchPath = null;
+            Invariant = name.ToLowerInvariant();
         }
 
         public ScriptName (string name, string defaultSearchPath) {
             Name = name;
             DefaultSearchPath = defaultSearchPath;
+            Invariant = name.ToLowerInvariant();
         }
 
         public static implicit operator string (ScriptName name) {
@@ -41,7 +45,7 @@ namespace ShootBlues {
         }
 
         public override int GetHashCode () {
-            return Name.GetHashCode();
+            return Invariant.GetHashCode();
         }
 
         public override string ToString () {
@@ -51,15 +55,15 @@ namespace ShootBlues {
         public override bool Equals (object obj) {
             var sn = obj as ScriptName;
             if (sn != null)
-                return Name.Equals(sn.Name);
+                return Invariant.Equals(sn.Invariant);
             else {
                 var fn = obj as Filename;
                 if (fn != null)
-                    return Name.Equals(fn.Name.Name);
+                    return Invariant.Equals(fn.Name.Invariant);
                 else {
                     var str = obj as String;
                     if (str != null)
-                        return Name.Equals(str);
+                        return Invariant.Equals(str.ToLowerInvariant());
                     else
                         return base.Equals(obj);
                 }
@@ -69,12 +73,14 @@ namespace ShootBlues {
 
     public class Filename {
         public readonly string FullPath;
+        private readonly string Invariant;
 
         private Filename (string filename, bool resolved) {
             if (!resolved)
                 FullPath = Path.GetFullPath(filename);
             else
                 FullPath = filename;
+            Invariant = FullPath.ToLowerInvariant();
         }
 
         public Filename (string filename)
@@ -117,7 +123,7 @@ namespace ShootBlues {
         }
 
         public override int GetHashCode () {
-            return FullPath.GetHashCode();
+            return Invariant.GetHashCode();
         }
 
         public override string ToString () {
@@ -127,11 +133,11 @@ namespace ShootBlues {
         public override bool Equals (object obj) {
             var fn = obj as Filename;
             if (fn != null)
-                return FullPath.Equals(fn.FullPath);
+                return Invariant.Equals(fn.Invariant);
             else {
                 var str = obj as String;
                 if (str != null)
-                    return FullPath.Equals(str);
+                    return Invariant.Equals(str.ToLowerInvariant());
                 else
                     return base.Equals(obj);
             }
@@ -161,13 +167,17 @@ namespace ShootBlues {
         }
 
         public IFuture Start (ISchedulable schedulable) {
-            var f = Program.Scheduler.Start(schedulable, TaskExecutionPolicy.RunWhileFutureLives);
+            var f = Program.Scheduler.Start(
+                schedulable, TaskExecutionPolicy.RunAsBackgroundTask
+            );
             OwnedFutures.Add(f);
             return f;
         }
 
         public IFuture Start (IEnumerator<object> task) {
-            var f = Program.Scheduler.Start(task, TaskExecutionPolicy.RunWhileFutureLives);
+            var f = Program.Scheduler.Start(
+                task, TaskExecutionPolicy.RunAsBackgroundTask
+            );
             OwnedFutures.Add(f);
             return f;
         }
@@ -564,7 +574,7 @@ namespace ShootBlues {
 
         public static Filename FindScript (ScriptName script) {
             foreach (var filename in Scripts)
-                if (filename.Name.Name == script.Name)
+                if (script.Equals(filename))
                     return filename;
 
             if (script.DefaultSearchPath != null) {
@@ -713,7 +723,8 @@ namespace ShootBlues {
 {0}
 result = __eval__()
 if result:
-  result = repr(result)
+  import json
+  result = json.dumps(result)
 from shootblues import rpcSend
 rpcSend(result, id={1}L)", pythonText, messageID
             );
@@ -728,12 +739,21 @@ rpcSend(result, id={1}L)", pythonText, messageID
             return fResult;
         }
 
-        public static Future<byte[]> CallFunction (ProcessInfo process, string moduleName, string functionName, string arguments) {
+        public static Future<byte[]> CallFunction (ProcessInfo process, string moduleName, string functionName, params object[] arguments) {
+            if ((arguments != null) && (arguments.Length == 0))
+                arguments = null;
+
+            string argsJson = null;
+            if (arguments != null) {
+                var serializer = new JavaScriptSerializer();
+                argsJson = serializer.Serialize(arguments);
+            }
+
             return process.Channel.Send(new RPCMessage {
                 Type = RPCMessageType.CallFunction,
                 ModuleName = moduleName,
                 FunctionName = functionName,
-                Text = arguments
+                Text = argsJson
             }, true);
         }
 
@@ -764,7 +784,7 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 yield return LoadScriptsInto(pi, scriptList);
         }
 
-        private static IEnumerator<object> LoadScriptsInto (ProcessInfo pi, ScriptName[] scriptList) {
+        public static IEnumerator<object> LoadScriptsInto (ProcessInfo pi, ScriptName[] scriptList) {
             foreach (var script in scriptList) {
                 yield return LoadedScripts[script].LoadInto(pi);
                 pi.LoadedScripts.Add(script);
@@ -787,6 +807,12 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 var errorText = fMessage.Result.DecodeAsciiZ();
                 MessageBox.Show(errorText, String.Format("Message from process {0}", pi.Process.Id));
             }
+        }
+
+        public static IManagedScript GetScriptInstance (ScriptName script) {
+            IManagedScript instance = null;
+            LoadedScripts.TryGetValue(script, out instance);
+            return instance;
         }
     }
 

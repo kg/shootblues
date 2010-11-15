@@ -46,8 +46,8 @@ namespace ShootBlues {
             }
             item.SelectedImageKey = item.ImageKey = filename;
 
-            IManagedScript instance;
-            if (Program.LoadedScripts.TryGetValue(script, out instance)) {
+            IManagedScript instance = Program.GetScriptInstance(script);
+            if (instance != null) {
                 foreach (var dep in instance.Dependencies)
                     item.Nodes.Add(BuildScriptNode(dep));
 
