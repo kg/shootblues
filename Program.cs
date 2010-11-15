@@ -486,6 +486,9 @@ namespace ShootBlues {
 
             yield return payload;
 
+            if (process.HasExited)
+                yield break;
+
             Console.WriteLine("Injecting payload into process {0}...", process.Id);
 
             var processExit = new SignalFuture();
@@ -505,7 +508,9 @@ namespace ShootBlues {
                 var fCodeRegion = Future.RunInThread(() =>
                     ProcessInjector.Inject(process, payload.Result, pi.Channel.Handle, payloadResult, threadId)
                 );
-                yield return fCodeRegion;
+                yield return Future.WaitForFirst(
+                    fCodeRegion, processExit
+                );
 
                 pi.Channel.RemoteThreadId = threadId.Result;
 
@@ -513,7 +518,9 @@ namespace ShootBlues {
                     pi.Status = "Payload injected";
                     RunningProcessesChanged.Set();
 
-                    yield return pi.Channel.Receive();
+                    yield return Future.WaitForFirst(
+                        pi.Channel.Receive(), processExit
+                    );
                     pi.Status = "Loading scripts...";
                     RunningProcessesChanged.Set();
 
@@ -522,18 +529,30 @@ namespace ShootBlues {
                     );
                     yield return buildScriptList;
 
-                    yield return LoadScriptsInto(pi, buildScriptList.Result);
+                    if (!process.HasExited)
+                        yield return Future.WaitForFirst(
+                            Scheduler.Start(
+                                LoadScriptsInto(pi, buildScriptList.Result), 
+                                TaskExecutionPolicy.RunAsBackgroundTask
+                            ), processExit
+                        );
 
-                    pi.Status = "Scripts loaded";
-                    RunningProcessesChanged.Set();
+                    if (!process.HasExited) {
+                        pi.Status = "Scripts loaded";
+                        RunningProcessesChanged.Set();
 
-                    var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
+                        var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
 
-                    using (fRpcTask)
-                        yield return payloadResult;
+                        using (fRpcTask)
+                            yield return Future.WaitForFirst(
+                                payloadResult, processExit
+                            );
 
-                    pi.Status = String.Format("Payload terminated with exit code {0}.", payloadResult.Result);
-                    RunningProcessesChanged.Set();
+                        if (payloadResult.Completed) {
+                            pi.Status = String.Format("Payload terminated with exit code {0}.", payloadResult.Result);
+                            RunningProcessesChanged.Set();
+                        }
+                    }
                 }
 
                 yield return processExit;

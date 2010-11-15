@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using System.Security;
+using Squared.Task;
 
 namespace ShootBlues {
     [Flags]
@@ -79,6 +80,9 @@ namespace ShootBlues {
             return Win32.CloseHandle(base.handle);
         }
     }
+
+    [SuppressUnmanagedCodeSecurity]
+    public delegate bool EnumWindowsProc (IntPtr hWnd, IntPtr lParam);
 
     public static class Win32 {
         [DllImport("kernel32", SetLastError = true)]
@@ -154,5 +158,66 @@ namespace ShootBlues {
         [DllImport("user32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
         public static extern bool PostThreadMessage (UInt32 threadId, int Msg, IntPtr wParam, UInt32 lParam);
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern IntPtr FindWindow (string lpClassName, string lpWindowName);
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern UInt32 GetWindowThreadProcessId (IntPtr hWnd, out int lpdwProcessId);
+        [DllImport("user32", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern bool EnumWindows (EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern int GetWindowText (IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern int GetWindowTextLength (IntPtr hWnd);
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern int GetClassName (IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        public static string GetWindowTextString (IntPtr hWnd) {
+            int length = GetWindowTextLength(hWnd);
+            var sb = new StringBuilder(length);
+            int numChars = GetWindowText(hWnd, sb, length);
+            if (numChars > 0)
+                return sb.ToString(0, numChars);
+            else
+                return null;
+        }
+
+        public static string GetWindowClassString (IntPtr hWnd) {
+            var sb = new StringBuilder(256);
+            int numChars = GetClassName(hWnd, sb, 256);
+            if (numChars > 0)
+                return sb.ToString(0, numChars);
+            else
+                return null;
+        }
+
+        public static IntPtr FindProcessWindow (int processId, string className, string windowName) {
+            var result = new Future<IntPtr>();
+            EnumWindowsProc callback = (hWnd, lParam) => {
+                int windowProcessId;
+                GetWindowThreadProcessId(hWnd, out windowProcessId);
+                if (windowProcessId != processId)
+                    return true;
+                if ((windowName != null) && (GetWindowTextString(hWnd) != windowName))
+                    return true;
+                if ((className != null) && (GetWindowClassString(hWnd) != className))
+                    return true;
+
+                result.SetResult(hWnd, null);
+                return false;
+            };
+
+            EnumWindows(callback, IntPtr.Zero);
+            if (result.Completed)
+                return result.Result;
+            else
+                return IntPtr.Zero;
+        }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Squared.Task;
+using System.Diagnostics;
 
 namespace ShootBlues {
     public class SimpleExecutableProfile : IProfile {
@@ -27,9 +28,13 @@ namespace ShootBlues {
                 yield return fNewProcess;
 
                 yield return new Start(
-                    Program.NotifyNewProcess(fNewProcess.Result)
+                    OnNewProcess(fNewProcess.Result), TaskExecutionPolicy.RunAsBackgroundTask
                 );
             }
+        }
+
+        protected virtual IEnumerator<object> OnNewProcess (Process process) {
+            yield return Program.NotifyNewProcess(process);
         }
 
         public virtual void Dispose () {

@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Squared.Task", "..\Fracture
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Squared.Util", "..\Fracture\Squared\Util\Squared.Util.csproj", "{D7F549CF-E0A6-491C-A78C-ECAB590BB2A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Profile_Python27", "Profile_Python27\Profile_Python27.csproj", "{C6F9E9DE-1DD0-4017-9EDD-4DD929C51C26}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Profile_Python", "Profile_Python\Profile_Python.csproj", "{C6F9E9DE-1DD0-4017-9EDD-4DD929C51C26}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
