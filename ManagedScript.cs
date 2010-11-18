@@ -4,8 +4,21 @@ using System.Linq;
 using System.Text;
 using Squared.Task;
 using System.Web.Script.Serialization;
+using Squared.Task.Data.Mapper;
 
 namespace ShootBlues {
+    [Mapper]
+    class PrefEntry {
+        [Column("prefName")]
+        public string Key {
+            get; set;
+        }
+        [Column("value")]
+        public object Value {
+            get; set;
+        }
+    }
+
     public abstract class ManagedScript : IManagedScript {
         protected HashSet<ScriptName> _Dependencies = new HashSet<ScriptName>();
         protected Dictionary<string, object> _Preferences = new Dictionary<string, object>();
@@ -31,22 +44,51 @@ namespace ShootBlues {
             _Dependencies.Add(new ScriptName(name, Name.DefaultSearchPath));
         }
 
-        public void SetPreference (string name, object value) {
-            _Preferences[name] = value;
-            _PreferencesChanged.Set();
+        public IEnumerator<object> SetPreference<T> (string prefName, T value) {
+            using (var query = Program.Database.BuildQuery(
+                "replace into prefs (scriptName, prefName, value) values (?, ?, ?)"
+            ))
+                yield return query.ExecuteNonQuery(Name, prefName, value);
         }
 
-        public bool GetPreference (string name, out object value) {
-            return _Preferences.TryGetValue(name, out value);
+        public Future<T> GetPreference<T> (string prefName) {
+            using (var query = Program.Database.BuildQuery(
+                "select value from prefs where scriptName = ? and prefName = ?"
+            ))
+                return query.ExecuteScalar<T>(Name, prefName);
         }
 
-        public string GetPreferencesJson () {
+        public IEnumerator<object> GetPreferences () {
+            var dict = new Dictionary<string, object>();
+
+            using (var query = Program.Database.BuildQuery(
+                "select prefName, value from prefs where scriptName = ?"
+            ))
+            using (var e = query.Execute<PrefEntry>(Name))
+            while (!e.Disposed) {
+                yield return e.Fetch();
+
+                foreach (var item in e)
+                    dict.Add(item.Key, item.Value);
+            }
+
+            yield return new Result(dict);
+        }
+
+        public IEnumerator<object> GetPreferencesJson () {
+            var rtc = new RunToCompletion<Dictionary<string, object>>(GetPreferences());
+            yield return rtc;
+
             var serializer = new JavaScriptSerializer();
-            return serializer.Serialize(_Preferences);
+            var json = serializer.Serialize(rtc.Result);
+            Console.WriteLine("json={0}", json);
+            yield return new Result(json);
         }
 
         public virtual IEnumerator<object> Initialize () {
-            yield break;
+            yield return Program.CreateDBTable(
+                "prefs", @"( scriptName TEXT NOT NULL, prefName TEXT NOT NULL, value VARIANT, PRIMARY KEY ( scriptName, prefName ) )"
+            );
         }
 
         public virtual IEnumerator<object> Reload () {

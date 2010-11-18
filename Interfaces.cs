@@ -6,6 +6,8 @@ using Squared.Task;
 using System.Windows.Forms;
 
 namespace ShootBlues {
+    public delegate IEnumerator<object> TableConverterTask (string oldTableName, string newTableName, string oldTableSql, string newTableSql);
+
     public interface IManagedScript : IDisposable {
         ScriptName Name {
             get;

@@ -9,6 +9,8 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
+using System.Data.SQLite;
+using Squared.Task.Data;
 
 namespace ShootBlues {
     public class ScriptName {
@@ -226,13 +228,15 @@ namespace ShootBlues {
         public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
         public static IProfile Profile;
         public static TaskScheduler Scheduler;
+        public static ConnectionWrapper Database;
 
         [STAThread]
         private static void Main () {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            using (Scheduler = new TaskScheduler(JobQueue.WindowsMessageBased)) {
+            using (Scheduler = new TaskScheduler(JobQueue.WindowsMessageBased))
+            using (Database = new ConnectionWrapper(Scheduler, OpenDatabase(), true)) {
                 Scheduler.ErrorHandler = OnTaskError;
 
                 using (var fMainTask = Scheduler.Start(MainTask(), TaskExecutionPolicy.RunAsBackgroundTask)) {
@@ -252,6 +256,23 @@ namespace ShootBlues {
             }
 
             Environment.Exit(ExitCode);
+        }
+
+        private static SQLiteConnection OpenDatabase () {
+            var dataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ShootBlues"
+            );
+            if (!Directory.Exists(dataFolder))
+                Directory.CreateDirectory(dataFolder);
+
+            var dbPath = Path.Combine(
+                dataFolder, "prefs.db"
+            );
+            var conn = new SQLiteConnection(String.Format("Data Source={0}", dbPath));
+            conn.Open();
+
+            return conn;
         }
 
         private static bool OnTaskError (Exception error) {
@@ -274,9 +295,9 @@ namespace ShootBlues {
             }) {
                 trayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
 
-                yield return new Start(
-                    ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
-                );
+                yield return Database.ExecuteSQL("PRAGMA journal_mode = MEMORY");
+                yield return Database.ExecuteSQL("PRAGMA temp_store = MEMORY");
+                yield return Database.ExecuteSQL("PRAGMA synchronous = 0");
 
                 RunToCompletion<IProfile> loadProfile = new RunToCompletion<IProfile>(
                     LoadProfile(), TaskExecutionPolicy.RunAsBackgroundTask
@@ -285,6 +306,21 @@ namespace ShootBlues {
 
                 using (Profile = loadProfile.Result)
                 try {
+                    yield return CreateDBTable("scripts", "( profileName TEXT NOT NULL, filename TEXT NOT NULL, PRIMARY KEY (profileName, filename) )");
+
+                    using (var q = Database.BuildQuery("SELECT filename FROM scripts WHERE profileName = ?")) {
+                        QueryDataReader qdr = null;
+                        yield return q.ExecuteReader(loadProfile.Result.Name).Bind(() => qdr);
+
+                        using (qdr)
+                            while (qdr.Reader.Read())
+                                Scripts.Add(qdr.Reader.GetString(0));
+                    }
+
+                    yield return new Start(
+                        ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
+                    );
+
                     trayIcon.Text = trayIcon.Text + " - " + Profile.Name;
                     trayIcon.Visible = true;
                     yield return Profile.Run();
@@ -323,6 +359,45 @@ namespace ShootBlues {
 
             Console.WriteLine("Done shutting down.");
             Application.Exit();
+        }
+
+        public static IEnumerator<object> DefaultTableConverter (string oldTableName, string newTableName, string oldTableSql, string newTableSql) {
+            yield return Database.ExecuteSQL(String.Format(
+                "insert into {0} select * from {1}", newTableName, oldTableName
+            ));
+        }
+
+        public static IEnumerator<object> CreateDBTable (string tableName, string tableDef) {
+            return CreateDBTable(tableName, tableDef, DefaultTableConverter);
+        }
+
+        public static IEnumerator<object> CreateDBTable (string tableName, string tableDef, TableConverterTask tableConverter) {
+            tableDef = tableDef.Trim();
+
+            string sql = null;
+            string oldName = String.Format("{0}_old", tableName);
+
+            using (var xact = Database.CreateTransaction()) {
+                yield return xact;
+
+                using (var q = Database.BuildQuery(@"select sql from sqlite_master where tbl_name = ? and type = 'table'"))
+                    yield return q.ExecuteScalar<string>(tableName).Bind(() => sql);
+
+                if (sql != tableDef) {
+                    if (sql != null)
+                        yield return Database.ExecuteSQL(String.Format("alter table {0} rename to {1}", tableName, oldName));
+
+                    yield return Database.ExecuteSQL(String.Format("create table {0} {1}", tableName, tableDef));
+
+                    if (sql != null) {
+                        yield return tableConverter(oldName, tableName, sql, tableDef);
+
+                        yield return Database.ExecuteSQL(String.Format("drop table {0}", oldName));
+                    }
+                }
+
+                yield return xact.Commit();
+            }
         }
 
         private static IEnumerator<object> LoadProfile () {
@@ -484,6 +559,20 @@ namespace ShootBlues {
             yield return new Result(result.ToArray());
         }
 
+        private static IEnumerator<object> SaveScriptsToDatabase () {
+            using (var xact = Database.CreateTransaction()) {
+                yield return xact;
+
+                Database.ExecuteSQL("DELETE FROM scripts WHERE profileName = ?", Profile.Name);
+
+                using (var q = Database.BuildQuery("INSERT INTO scripts (profileName, filename) VALUES (?, ?)"))
+                foreach (var filename in Scripts)
+                    yield return q.ExecuteNonQuery(Profile.Name, filename.FullPath);
+
+                yield return xact.Commit();
+            }
+        }
+
         private static IEnumerator<object> ScriptLoaderTask () {
             while (true) {
                 var buildScriptList = new RunToCompletion<ScriptName[]>(
@@ -513,6 +602,8 @@ namespace ShootBlues {
                 ScriptsChanged.Set();
 
                 yield return ScriptsChanged.Wait();
+
+                yield return new Start(SaveScriptsToDatabase(), TaskExecutionPolicy.RunAsBackgroundTask);
             }
         }
 
