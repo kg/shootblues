@@ -49,6 +49,8 @@ namespace ShootBlues {
                 "replace into prefs (scriptName, prefName, value) values (?, ?, ?)"
             ))
                 yield return query.ExecuteNonQuery(Name, prefName, value);
+
+            _PreferencesChanged.Set();
         }
 
         public Future<T> GetPreference<T> (string prefName) {

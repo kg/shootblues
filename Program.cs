@@ -375,24 +375,25 @@ namespace ShootBlues {
             tableDef = tableDef.Trim();
 
             string sql = null;
+            string newSql = String.Format("CREATE TABLE {0} {1}", tableName, tableDef);
             string oldName = String.Format("{0}_old", tableName);
 
             using (var xact = Database.CreateTransaction()) {
                 yield return xact;
 
-                using (var q = Database.BuildQuery(@"select sql from sqlite_master where tbl_name = ? and type = 'table'"))
+                using (var q = Database.BuildQuery(@"SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'"))
                     yield return q.ExecuteScalar<string>(tableName).Bind(() => sql);
 
-                if (sql != tableDef) {
+                if (String.Compare(sql, newSql, true) != 0) {
                     if (sql != null)
-                        yield return Database.ExecuteSQL(String.Format("alter table {0} rename to {1}", tableName, oldName));
+                        yield return Database.ExecuteSQL(String.Format("ALTER TABLE {0} RENAME TO {1}", tableName, oldName));
 
-                    yield return Database.ExecuteSQL(String.Format("create table {0} {1}", tableName, tableDef));
+                    yield return Database.ExecuteSQL(newSql);
 
                     if (sql != null) {
-                        yield return tableConverter(oldName, tableName, sql, tableDef);
+                        yield return tableConverter(oldName, tableName, sql, newSql);
 
-                        yield return Database.ExecuteSQL(String.Format("drop table {0}", oldName));
+                        yield return Database.ExecuteSQL(String.Format("DROP TABLE {0}", oldName));
                     }
                 }
 
@@ -591,12 +592,7 @@ namespace ShootBlues {
                     if (!LoadedScripts.ContainsKey(scriptName))
                         yield return LoadScript(scriptName);
 
-                var f = Scheduler.Start(
-                    ReloadAllScripts(scriptList), TaskExecutionPolicy.RunAsBackgroundTask
-                );
-                yield return new WaitWithTimeout(
-                    f, 15.0
-                );
+                yield return ReloadAllScripts(scriptList);
 
                 // Dirty trick to make other subscribers refresh their status
                 ScriptsChanged.Set();
@@ -720,13 +716,11 @@ namespace ShootBlues {
                 dialog.Filter = String.Format("{0}|{0}|All Scripts|*.script.dll;*.py", script.Name);
                 dialog.InitialDirectory = Path.GetDirectoryName(Application.ExecutablePath);
                 if (dialog.ShowDialog() != DialogResult.OK)
-                    throw new Exception(String.Format(
-                        "Script '{0}' not found.", script.Name
+                    yield return new Result(null);
+                else
+                    yield return new Result(new Filename(
+                        dialog.FileName
                     ));
-
-                yield return new Result(new Filename(
-                    dialog.FileName
-                ));
             }
         }
 
@@ -748,7 +742,9 @@ namespace ShootBlues {
             yield return fScriptPath;
             var scriptPath = fScriptPath.Result;
 
-            if (script.Extension == ".py") {
+            if (scriptPath == null) {
+                instance = null;
+            } else if (script.Extension == ".py") {
                 instance = new PythonScript(scriptPath.Name);
             } else if (script.Extension == ".dll") {
                 var fAssembly = Future.RunInThread(() =>
@@ -774,18 +770,19 @@ namespace ShootBlues {
             }
 
             if (instance == null) {
-                MessageBox.Show(String.Format("The file '{0}' is not a Shoot Blues script.", script), "Error");
-                yield break;
+                if (scriptPath != null)
+                    MessageBox.Show(String.Format("The file '{0}' is not a Shoot Blues script.", scriptPath), "Error");
+            } else {
+                yield return instance.Initialize();
+
+                LoadedScripts[script] = instance;
+
+                if (StatusWindowInstance != null)
+                    yield return instance.OnStatusWindowShown(StatusWindowInstance);
             }
 
-            yield return instance.Initialize();
-
-            LoadedScripts[script] = instance;
             LoadingScripts.Remove(script);
             loadFuture.Complete();
-
-            if (StatusWindowInstance != null)
-                yield return instance.OnStatusWindowShown(StatusWindowInstance);
         }
 
         public static IEnumerator<object> UnloadScript (ScriptName script) {
