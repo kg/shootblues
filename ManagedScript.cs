@@ -83,7 +83,6 @@ namespace ShootBlues {
 
             var serializer = new JavaScriptSerializer();
             var json = serializer.Serialize(rtc.Result);
-            Console.WriteLine("json={0}", json);
             yield return new Result(json);
         }
 

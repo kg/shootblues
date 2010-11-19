@@ -25,7 +25,7 @@ namespace ShootBlues {
         IEnumerator<object> OnStatusWindowHidden (IStatusWindow statusWindow);
     }
 
-    public interface IStatusWindow : ITaskForm {
+    public interface IStatusWindow : ITaskOwner {
         TabPage ShowConfigurationPanel (string name, Control panel);
         void HideConfigurationPanel (TabPage page);
         void HideConfigurationPanel (string name);

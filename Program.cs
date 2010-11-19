@@ -218,6 +218,7 @@ namespace ShootBlues {
         private static StatusWindow StatusWindowInstance = null;
         private static ContextMenuStrip TrayMenu = null;
         private static Dictionary<ScriptName, SignalFuture> LoadingScripts = new Dictionary<ScriptName, SignalFuture>();
+        private static HashSet<string> AttachedDatabases = new HashSet<string>();
         private static int ExitCode = 0;
 
         internal static Dictionary<ScriptName, IManagedScript> LoadedScripts = new Dictionary<ScriptName, IManagedScript>();
@@ -308,14 +309,15 @@ namespace ShootBlues {
                 try {
                     yield return CreateDBTable("scripts", "( profileName TEXT NOT NULL, filename TEXT NOT NULL, PRIMARY KEY (profileName, filename) )");
 
-                    using (var q = Database.BuildQuery("SELECT filename FROM scripts WHERE profileName = ?")) {
-                        QueryDataReader qdr = null;
-                        yield return q.ExecuteReader(loadProfile.Result.Name).Bind(() => qdr);
+                    string[] filenames = null;
 
-                        using (qdr)
-                            while (qdr.Reader.Read())
-                                Scripts.Add(qdr.Reader.GetString(0));
-                    }
+                    yield return Database.ExecutePrimitiveArray<string>(
+                        "SELECT filename FROM scripts WHERE profileName = ?", 
+                        loadProfile.Result.Name
+                    ).Bind(() => filenames);
+
+                    foreach (var filename in filenames)
+                        Scripts.Add(filename);
 
                     yield return new Start(
                         ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
@@ -361,9 +363,25 @@ namespace ShootBlues {
             Application.Exit();
         }
 
+        public static IEnumerator<object> AttachDB (string dbName) {
+            var dbPath = Path.GetFullPath(Path.Combine(
+                Path.GetDirectoryName(Application.ExecutablePath),
+                dbName + ".db"
+            ));
+
+            if (AttachedDatabases.Contains(dbName))
+                yield break;
+
+            AttachedDatabases.Add(dbName);
+
+            yield return Database.ExecuteSQL(String.Format(
+                "ATTACH DATABASE '{0}' AS {1}", dbPath, dbName
+            ));
+        }
+
         public static IEnumerator<object> DefaultTableConverter (string oldTableName, string newTableName, string oldTableSql, string newTableSql) {
             yield return Database.ExecuteSQL(String.Format(
-                "insert into {0} select * from {1}", newTableName, oldTableName
+                "INSERT INTO {0} SELECT * FROM {1}", newTableName, oldTableName
             ));
         }
 
@@ -378,25 +396,23 @@ namespace ShootBlues {
             string newSql = String.Format("CREATE TABLE {0} {1}", tableName, tableDef);
             string oldName = String.Format("{0}_old", tableName);
 
-            using (var xact = Database.CreateTransaction()) {
+            using (var q = Database.BuildQuery(@"SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'"))
+                yield return q.ExecuteScalar<string>(tableName).Bind(() => sql);
+
+            if (String.Compare(sql, newSql, true) != 0)
+            using (var xact = Database.CreateTransaction(true)) {
                 yield return xact;
 
-                using (var q = Database.BuildQuery(@"SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'"))
-                    yield return q.ExecuteScalar<string>(tableName).Bind(() => sql);
+                if (sql != null)
+                    yield return Database.ExecuteSQL(String.Format("ALTER TABLE {0} RENAME TO {1}", tableName, oldName));
 
-                if (String.Compare(sql, newSql, true) != 0) {
-                    if (sql != null)
-                        yield return Database.ExecuteSQL(String.Format("ALTER TABLE {0} RENAME TO {1}", tableName, oldName));
+                yield return Database.ExecuteSQL(newSql);
 
-                    yield return Database.ExecuteSQL(newSql);
+                if (sql != null) {
+                    yield return tableConverter(oldName, tableName, sql, newSql);
 
-                    if (sql != null) {
-                        yield return tableConverter(oldName, tableName, sql, newSql);
-
-                        yield return Database.ExecuteSQL(String.Format("DROP TABLE {0}", oldName));
-                    }
+                    yield return Database.ExecuteSQL(String.Format("DROP TABLE {0}", oldName));
                 }
-
                 yield return xact.Commit();
             }
         }
@@ -523,6 +539,7 @@ namespace ShootBlues {
                     continue;
 
                 yield return LoadScript(current);
+
                 if (!LoadedScripts.TryGetValue(current, out instance)) {
                     Console.WriteLine("Skipping '{0}' due to failed load.", current);
                     continue;
@@ -561,7 +578,7 @@ namespace ShootBlues {
         }
 
         private static IEnumerator<object> SaveScriptsToDatabase () {
-            using (var xact = Database.CreateTransaction()) {
+            using (var xact = Database.CreateTransaction(true)) {
                 yield return xact;
 
                 Database.ExecuteSQL("DELETE FROM scripts WHERE profileName = ?", Profile.Name);
