@@ -20,9 +20,10 @@ namespace ShootBlues {
     }
 
     public abstract class ManagedScript : IManagedScript {
+        public readonly Signal PreferencesChanged = new Signal();
+
         protected HashSet<ScriptName> _Dependencies = new HashSet<ScriptName>();
         protected Dictionary<string, object> _Preferences = new Dictionary<string, object>();
-        protected Signal _PreferencesChanged = new Signal();
         protected IFuture _PreferencesTask;
 
         public ScriptName Name {
@@ -50,7 +51,7 @@ namespace ShootBlues {
             ))
                 yield return query.ExecuteNonQuery(Name, prefName, value);
 
-            _PreferencesChanged.Set();
+            PreferencesChanged.Set();
         }
 
         public Future<T> GetPreference<T> (string prefName) {
@@ -118,7 +119,7 @@ namespace ShootBlues {
 
         protected IEnumerator<object> PreferencesTask () {
             while (true) {
-                yield return _PreferencesChanged.Wait();
+                yield return PreferencesChanged.Wait();
 
                 yield return new Start(
                     OnPreferencesChanged(), TaskExecutionPolicy.RunAsBackgroundTask
