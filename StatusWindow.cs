@@ -35,7 +35,16 @@ namespace ShootBlues {
             var filename = Program.FindScript(script);
 
             var item = new TreeNode();
-            item.Text = filename ?? script.Name;
+            string text = filename;
+            if (text != null) {
+                var appUri = new Uri(Path.GetDirectoryName(Application.ExecutablePath) + "\\");
+                var uri = new Uri(filename);
+                var relUri = appUri.MakeRelativeUri(uri);
+                text = relUri.ToString().Replace("/", "\\");
+            } else {
+                text = script.Name;
+            }
+            item.Text = text;
             item.Tag = filename;
 
             if ((filename != null) && (!ScriptImageList.Images.ContainsKey(filename))) {
