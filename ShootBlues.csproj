@@ -71,6 +71,12 @@
       <DependentUpon>EnterPythonDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="Interfaces.cs" />
+    <Compile Include="LoadingWindow.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="LoadingWindow.Designer.cs">
+      <DependentUpon>LoadingWindow.cs</DependentUpon>
+    </Compile>
     <Compile Include="ManagedScript.cs" />
     <Compile Include="PythonScript.cs" />
     <Compile Include="SimpleExecutableProfile.cs" />
@@ -127,6 +133,9 @@
   <ItemGroup>
     <EmbeddedResource Include="EnterPythonDialog.resx">
       <DependentUpon>EnterPythonDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="LoadingWindow.resx">
+      <DependentUpon>LoadingWindow.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="payload.dll" />
   </ItemGroup>

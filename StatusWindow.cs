@@ -62,6 +62,9 @@ namespace ShootBlues {
 
                 if (item.Nodes.Count > 0)
                     item.Expand();
+            } else {
+                item.SelectedImageKey = "missing";
+                item.ToolTipText = "Script missing or failed to load!";
             }
 
             return item;
@@ -78,7 +81,8 @@ namespace ShootBlues {
 
                 ScriptsList.BeginUpdate();
                 ScriptsList.Nodes.Clear();
-                ScriptImageList.Images.Clear();
+                while (ScriptImageList.Images.Count > 1)
+                    ScriptImageList.Images.RemoveAt(1);                
 
                 foreach (var script in Program.Scripts) {
                     var item = BuildScriptNode(script.Name);

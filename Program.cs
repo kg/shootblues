@@ -31,7 +31,10 @@ namespace ShootBlues {
         }
 
         public static implicit operator string (ScriptName name) {
-            return name.Name;
+            if (name != null)
+                return name.Name;
+            else
+                return null;
         }
 
         public string NameWithoutExtension {
@@ -78,10 +81,15 @@ namespace ShootBlues {
         private readonly string Invariant;
 
         private Filename (string filename, bool resolved) {
-            if (!resolved)
-                FullPath = Path.GetFullPath(filename);
-            else
+            if (!resolved) {
+                try {
+                    FullPath = Path.GetFullPath(filename);
+                } catch {
+                    FullPath = filename;
+                }
+            } else
                 FullPath = filename;
+
             Invariant = FullPath.ToLowerInvariant();
         }
 
@@ -121,7 +129,10 @@ namespace ShootBlues {
         }
 
         public static implicit operator string (Filename filename) {
-            return filename.FullPath;
+            if (filename != null)
+                return filename.FullPath;
+            else
+                return null;
         }
 
         public override int GetHashCode () {
@@ -227,6 +238,7 @@ namespace ShootBlues {
         public static readonly Signal ScriptsChanged = new Signal();
         public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
         public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
+        public static readonly HashSet<ScriptName> FailedScripts = new HashSet<ScriptName>();
         public static IProfile Profile;
         public static TaskScheduler Scheduler;
         public static ConnectionWrapper Database;
@@ -289,6 +301,7 @@ namespace ShootBlues {
             TrayMenu.AddItem("E&xit", (s, e) => Application.Exit());
 
             using (TrayMenu)
+            using (var loadingWindow = new LoadingWindow())
             using (var trayIcon = new NotifyIcon {
                 Text = "Shoot Blues v" + Application.ProductVersion,
                 Icon = Properties.Resources.icon,
@@ -296,12 +309,15 @@ namespace ShootBlues {
             }) {
                 trayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
 
+                loadingWindow.SetStatus("Loading profile", null);
+                loadingWindow.Show();
+
                 yield return Database.ExecuteSQL("PRAGMA journal_mode = MEMORY");
                 yield return Database.ExecuteSQL("PRAGMA temp_store = MEMORY");
                 yield return Database.ExecuteSQL("PRAGMA synchronous = 0");
 
                 RunToCompletion<IProfile> loadProfile = new RunToCompletion<IProfile>(
-                    LoadProfile(), TaskExecutionPolicy.RunAsBackgroundTask
+                    LoadProfile(loadingWindow), TaskExecutionPolicy.RunAsBackgroundTask
                 );
                 yield return loadProfile;
 
@@ -313,11 +329,13 @@ namespace ShootBlues {
 
                     yield return Database.ExecutePrimitiveArray<string>(
                         "SELECT filename FROM scripts WHERE profileName = ?", 
-                        loadProfile.Result.Name
+                        Profile.Name
                     ).Bind(() => filenames);
 
                     foreach (var filename in filenames)
                         Scripts.Add(filename);
+
+                    loadingWindow.Close();
 
                     yield return new Start(
                         ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
@@ -325,6 +343,7 @@ namespace ShootBlues {
 
                     trayIcon.Text = trayIcon.Text + " - " + Profile.Name;
                     trayIcon.Visible = true;
+
                     yield return Profile.Run();
                 } finally {
                     trayIcon.Visible = false;
@@ -417,7 +436,7 @@ namespace ShootBlues {
             }
         }
 
-        private static IEnumerator<object> LoadProfile () {
+        private static IEnumerator<object> LoadProfile (LoadingWindow loadingWindow) {
             IProfile instance = null;
 
             string profilePath = null;
@@ -439,7 +458,7 @@ namespace ShootBlues {
                     dialog.Filter = "Shoot Blues Profiles|*.profile.dll";
                     dialog.InitialDirectory = Path.GetDirectoryName(Application.ExecutablePath);
 
-                    if (dialog.ShowDialog() != DialogResult.OK) {
+                    if (dialog.ShowDialog(loadingWindow) != DialogResult.OK) {
                         Application.Exit();
                         yield break;
                     }
@@ -509,8 +528,11 @@ namespace ShootBlues {
             }
 
             using (StatusWindowInstance = new StatusWindow(Scheduler)) {
-                foreach (var instance in LoadedScripts.Values)
+                var names = (from sn in LoadedScripts.Keys orderby sn.Name select sn).ToArray();
+                foreach (var sn in names) {
+                    var instance = LoadedScripts[sn];
                     yield return instance.OnStatusWindowShown(StatusWindowInstance);
+                }
 
                 if (initialPage != null)
                     try {
@@ -524,28 +546,42 @@ namespace ShootBlues {
             StatusWindowInstance = null;
         }
 
-        public static IEnumerator<object> BuildOrderedScriptList () {
+        public static IEnumerator<object> BuildOrderedScriptList (LoadingWindow loadingWindow) {
             IManagedScript instance = null;
             var visited = new HashSet<ScriptName>();
             var result = new List<ScriptName>();
             var toVisit = new LinkedList<ScriptName>(
                 from fn in Scripts select fn.Name
             );
+            var majorScripts = new HashSet<ScriptName>(
+                from fn in Scripts select fn.Name
+            );
+
+            int initialCount = majorScripts.Count;
 
             while (toVisit.Count > 0) {
+                if (loadingWindow != null)
+                    loadingWindow.SetProgress(
+                        1.0f - (majorScripts.Count / (float)initialCount)
+                    );
+
                 var current = toVisit.PopFirst();
 
                 if (result.Contains(current))
                     continue;
 
-                yield return LoadScript(current);
+                visited.Add(current);
+                majorScripts.Remove(current);
+
+                yield return LoadScript(current, loadingWindow);
 
                 if (!LoadedScripts.TryGetValue(current, out instance)) {
-                    Console.WriteLine("Skipping '{0}' due to failed load.", current);
+                    if (!FailedScripts.Contains(current))
+                        FailedScripts.Add(current);
+
                     continue;
                 }
 
-                visited.Add(current);
                 var head = toVisit.First;
 
                 bool resolved = true;
@@ -593,26 +629,31 @@ namespace ShootBlues {
 
         private static IEnumerator<object> ScriptLoaderTask () {
             while (true) {
-                var buildScriptList = new RunToCompletion<ScriptName[]>(
-                    BuildOrderedScriptList(), TaskExecutionPolicy.RunWhileFutureLives
-                );
-                yield return buildScriptList;
+                using (var loadingWindow = new LoadingWindow()) {
+                    loadingWindow.SetStatus("Loading scripts", null);
+                    loadingWindow.Show();
 
-                var scriptList = buildScriptList.Result;
+                    var buildScriptList = new RunToCompletion<ScriptName[]>(
+                        BuildOrderedScriptList(loadingWindow), TaskExecutionPolicy.RunWhileFutureLives
+                    );
+                    yield return buildScriptList;
 
-                var loadedScriptNames = LoadedScripts.Keys.ToArray();
-                foreach (var scriptName in loadedScriptNames)
-                    if (!scriptList.Contains(scriptName))
-                        yield return UnloadScript(scriptName);
+                    var scriptList = buildScriptList.Result;
 
-                foreach (var scriptName in scriptList)
-                    if (!LoadedScripts.ContainsKey(scriptName))
-                        yield return LoadScript(scriptName);
+                    var loadedScriptNames = LoadedScripts.Keys.ToArray();
+                    foreach (var scriptName in loadedScriptNames)
+                        if (!scriptList.Contains(scriptName))
+                            yield return UnloadScript(scriptName);
 
-                yield return ReloadAllScripts(scriptList);
+                    foreach (var scriptName in scriptList)
+                        if (!LoadedScripts.ContainsKey(scriptName))
+                            yield return LoadScript(scriptName, loadingWindow);
 
-                // Dirty trick to make other subscribers refresh their status
-                ScriptsChanged.Set();
+                    yield return ReloadAllScripts(scriptList);
+
+                    // Dirty trick to make other subscribers refresh their status
+                    ScriptsChanged.Set();
+                }
 
                 yield return ScriptsChanged.Wait();
 
@@ -632,8 +673,6 @@ namespace ShootBlues {
 
             if (process.HasExited)
                 yield break;
-
-            Console.WriteLine("Injecting payload into process {0}...", process.Id);
 
             var processExit = new SignalFuture();
             process.Exited += (s, e) => {
@@ -659,27 +698,28 @@ namespace ShootBlues {
                 pi.Channel.RemoteThreadId = threadId.Result;
 
                 using (fCodeRegion.Result) {
-                    pi.Status = "Payload injected";
                     RunningProcessesChanged.Set();
 
                     yield return Future.WaitForFirst(
                         pi.Channel.Receive(), processExit
                     );
-                    pi.Status = "Loading scripts...";
+
+                    pi.Status = "Loading scripts into process";
                     RunningProcessesChanged.Set();
 
                     var buildScriptList = new RunToCompletion<ScriptName[]>(
-                        BuildOrderedScriptList(), TaskExecutionPolicy.RunWhileFutureLives
+                        BuildOrderedScriptList(null), TaskExecutionPolicy.RunWhileFutureLives
                     );
                     yield return buildScriptList;
 
                     if (!process.HasExited)
                         yield return Future.WaitForFirst(
                             Scheduler.Start(
-                                LoadScriptsInto(pi, buildScriptList.Result), 
+                                LoadScriptsInto(pi, buildScriptList.Result),
                                 TaskExecutionPolicy.RunAsBackgroundTask
                             ), processExit
                         );
+
 
                     if (!process.HasExited) {
                         pi.Status = "Scripts loaded";
@@ -722,17 +762,20 @@ namespace ShootBlues {
             return null;
         }
 
-        public static IEnumerator<object> FindScriptInteractive (ScriptName script) {
+        public static IEnumerator<object> FindScriptInteractive (ScriptName script, LoadingWindow loadingWindow) {
             var filename = FindScript(script);
 
             if (filename != null)
                 yield return new Result(filename);
 
+            if (FailedScripts.Contains(script) || (loadingWindow == null))
+                yield return new Result(null);
+
             using (var dialog = new OpenFileDialog()) {
                 dialog.Title = String.Format("Locate script '{0}'", script.Name);
                 dialog.Filter = String.Format("{0}|{0}|All Scripts|*.script.dll;*.py", script.Name);
                 dialog.InitialDirectory = Path.GetDirectoryName(Application.ExecutablePath);
-                if (dialog.ShowDialog() != DialogResult.OK)
+                if (dialog.ShowDialog(loadingWindow) != DialogResult.OK)
                     yield return new Result(null);
                 else
                     yield return new Result(new Filename(
@@ -741,7 +784,7 @@ namespace ShootBlues {
             }
         }
 
-        public static IEnumerator<object> LoadScript (ScriptName script) {
+        public static IEnumerator<object> LoadScript (ScriptName script, LoadingWindow loadingWindow) {
             IManagedScript instance = null;
             SignalFuture loadFuture;
             if (LoadingScripts.TryGetValue(script, out loadFuture)) {
@@ -754,7 +797,7 @@ namespace ShootBlues {
             }
 
             var fScriptPath = new RunToCompletion<Filename>(
-                FindScriptInteractive(script), TaskExecutionPolicy.RunWhileFutureLives
+                FindScriptInteractive(script, loadingWindow), TaskExecutionPolicy.RunWhileFutureLives
             );
             yield return fScriptPath;
             var scriptPath = fScriptPath.Result;
@@ -894,7 +937,7 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
         public static IEnumerator<object> ReloadAllScripts () {
             var buildScriptList = new RunToCompletion<ScriptName[]>(
-                BuildOrderedScriptList(), TaskExecutionPolicy.RunWhileFutureLives
+                BuildOrderedScriptList(null), TaskExecutionPolicy.RunWhileFutureLives
             );
             yield return buildScriptList;
             var scriptList = buildScriptList.Result;
