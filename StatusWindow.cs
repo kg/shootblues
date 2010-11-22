@@ -169,8 +169,18 @@ namespace ShootBlues {
         }
 
         private void AddScripts (IEnumerable<string> filenames) {
-            foreach (var filename in filenames)
-                Program.Scripts.Add(filename);
+            foreach (var filename in filenames) {
+                bool alreadyInList = false;
+                foreach (var script in Program.Scripts) {
+                    if (script.Name.Equals((new Filename(filename)).Name)) {
+                        alreadyInList = true;
+                        break;
+                    }
+                }
+
+                if (!alreadyInList)
+                    Program.Scripts.Add(filename);
+            }
             Program.ScriptsChanged.Set();
         }
 
