@@ -23,6 +23,7 @@ namespace ShootBlues {
         public readonly Signal PreferencesChanged = new Signal();
 
         protected HashSet<ScriptName> _Dependencies = new HashSet<ScriptName>();
+        protected HashSet<ScriptName> _OptionalDependencies = new HashSet<ScriptName>();
         protected Dictionary<string, object> _Preferences = new Dictionary<string, object>();
         protected IFuture _PreferencesTask;
 
@@ -41,8 +42,20 @@ namespace ShootBlues {
             get { return _Dependencies; }
         }
 
+        public IEnumerable<ScriptName> OptionalDependencies {
+            get { return _OptionalDependencies; }
+        }
+
+        protected void AddDependency (string name, bool optional) {
+            var sn = new ScriptName(name, Name.DefaultSearchPath);
+            if (optional)
+                _OptionalDependencies.Add(sn);
+            else
+                _Dependencies.Add(sn);
+        }
+
         protected void AddDependency (string name) {
-            _Dependencies.Add(new ScriptName(name, Name.DefaultSearchPath));
+            AddDependency(name, false);
         }
 
         public IEnumerator<object> SetPreference<T> (string prefName, T value) {

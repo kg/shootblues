@@ -10,6 +10,8 @@ using System.IO;
 
 namespace ShootBlues {
     public partial class StatusWindow : TaskForm, IStatusWindow {
+        IConfigurationPanel _ActivePanel = null;
+
         public StatusWindow (TaskScheduler scheduler)
             : base(scheduler) {
             InitializeComponent();
@@ -31,7 +33,7 @@ namespace ShootBlues {
             }
         }
 
-        private TreeNode BuildScriptNode (ScriptName script) {
+        private TreeNode BuildScriptNode (ScriptName script, bool optional, out bool shouldExpand) {
             var filename = Program.FindScript(script);
 
             var item = new TreeNode();
@@ -55,16 +57,31 @@ namespace ShootBlues {
             }
             item.SelectedImageKey = item.ImageKey = filename;
 
+            shouldExpand = false;
+            bool se = false;
+
             IManagedScript instance = Program.GetScriptInstance(script);
             if (instance != null) {
                 foreach (var dep in instance.Dependencies)
-                    item.Nodes.Add(BuildScriptNode(dep));
+                    item.Nodes.Add(BuildScriptNode(dep, false, out se));
 
-                if (item.Nodes.Count > 0)
+                foreach (var dep in instance.OptionalDependencies)
+                    item.Nodes.Add(BuildScriptNode(dep, true, out se));
+
+                if (se) {
                     item.Expand();
+                    shouldExpand = true;
+                }
             } else {
-                item.SelectedImageKey = "missing";
-                item.ToolTipText = "Script missing or failed to load!";
+                if (optional) {
+                    item.SelectedImageKey = item.ImageKey = "optional";
+                    item.ToolTipText = "Optional script not loaded.";
+                } else {
+                    item.SelectedImageKey = item.ImageKey = "missing";
+                    item.ToolTipText = "Script missing or failed to load!";
+                }
+
+                shouldExpand = true;
             }
 
             return item;
@@ -81,11 +98,12 @@ namespace ShootBlues {
 
                 ScriptsList.BeginUpdate();
                 ScriptsList.Nodes.Clear();
-                while (ScriptImageList.Images.Count > 1)
-                    ScriptImageList.Images.RemoveAt(1);                
+                while (ScriptImageList.Images.Count > 2)
+                    ScriptImageList.Images.RemoveAt(2);
 
+                bool temp = false;
                 foreach (var script in Program.Scripts) {
-                    var item = BuildScriptNode(script.Name);
+                    var item = BuildScriptNode(script.Name, false, out temp);
 
                     ScriptsList.Nodes.Add(item);
                     if (script == selectedScript)
@@ -144,6 +162,8 @@ namespace ShootBlues {
         }
 
         private void StatusWindow_Shown (object sender, EventArgs e) {
+            ScriptsPage_SizeChanged(null, EventArgs.Empty);
+
             Start(ShowProcessList());
             Start(ShowScriptList());
         }
@@ -194,12 +214,14 @@ namespace ShootBlues {
             Program.ScriptsChanged.Set();
         }
 
-        public TabPage ShowConfigurationPanel (string title, Control panel) {
+        public TabPage ShowConfigurationPanel (string title, IConfigurationPanel panel) {
             TabPage tabPage = panel as TabPage;
+
             if (tabPage == null) {
+                var ctl = (Control)panel;
                 tabPage = new TabPage();
-                tabPage.Controls.Add(panel);
-                panel.Dock = DockStyle.Fill;
+                tabPage.Controls.Add(ctl);
+                ctl.Dock = DockStyle.Fill;
             }
 
             tabPage.Text = title;
@@ -217,8 +239,26 @@ namespace ShootBlues {
         }
 
         private void ScriptsList_AfterSelect (object sender, TreeViewEventArgs e) {
-            UnloadScriptButton.Enabled = (ScriptsList.SelectedNode != null) && 
-                (ScriptsList.SelectedNode.Parent == null);
+            UnloadScriptButton.Enabled = (ScriptsList.SelectedNode != null) &&
+                Program.Scripts.Contains(ScriptsList.SelectedNode.Tag as Filename);
+        }
+
+        private void ScriptsPage_SizeChanged (object sender, EventArgs e) {
+            ScriptsList.Height = ButtonPanel.Top - 4;
+        }
+
+        private void Tabs_SelectedIndexChanged (object sender, EventArgs e) {
+            var selectedTab = Tabs.SelectedTab;
+
+            IConfigurationPanel configPanel = selectedTab as IConfigurationPanel;
+            if ((configPanel == null) && (selectedTab.Controls.Count > 0))
+                configPanel = selectedTab.Controls[0] as IConfigurationPanel;
+
+            if (_ActivePanel != null)
+                Start(_ActivePanel.SaveConfiguration());
+            _ActivePanel = configPanel;
+            if (configPanel != null)
+                Start(configPanel.LoadConfiguration());
         }
     }
 }

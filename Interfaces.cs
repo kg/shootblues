@@ -15,6 +15,9 @@ namespace ShootBlues {
         IEnumerable<ScriptName> Dependencies {
             get;
         }
+        IEnumerable<ScriptName> OptionalDependencies {
+            get;
+        }
 
         IEnumerator<object> Initialize ();
         IEnumerator<object> Reload ();
@@ -25,8 +28,13 @@ namespace ShootBlues {
         IEnumerator<object> OnStatusWindowHidden (IStatusWindow statusWindow);
     }
 
+    public interface IConfigurationPanel {
+        IEnumerator<object> LoadConfiguration ();
+        IEnumerator<object> SaveConfiguration ();
+    }
+
     public interface IStatusWindow : ITaskOwner {
-        TabPage ShowConfigurationPanel (string name, Control panel);
+        TabPage ShowConfigurationPanel (string name, IConfigurationPanel panel);
         void HideConfigurationPanel (TabPage page);
         void HideConfigurationPanel (string name);
     }

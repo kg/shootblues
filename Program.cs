@@ -531,7 +531,12 @@ namespace ShootBlues {
                 var names = (from sn in LoadedScripts.Keys orderby sn.Name select sn).ToArray();
                 foreach (var sn in names) {
                     var instance = LoadedScripts[sn];
-                    yield return instance.OnStatusWindowShown(StatusWindowInstance);
+
+                    var f = Scheduler.Start(
+                        instance.OnStatusWindowShown(StatusWindowInstance), TaskExecutionPolicy.RunAsBackgroundTask
+                    );
+                    yield return f;
+                    var temp = f.Failed;
                 }
 
                 if (initialPage != null)
@@ -550,12 +555,9 @@ namespace ShootBlues {
             IManagedScript instance = null;
             var visited = new HashSet<ScriptName>();
             var result = new List<ScriptName>();
-            var toVisit = new LinkedList<ScriptName>(
-                from fn in Scripts select fn.Name
-            );
-            var majorScripts = new HashSet<ScriptName>(
-                from fn in Scripts select fn.Name
-            );
+            var allScripts = new HashSet<ScriptName>(from fn in Scripts select fn.Name);
+            var toVisit = new LinkedList<ScriptName>(allScripts);
+            var majorScripts = new HashSet<ScriptName>(allScripts);
 
             int initialCount = majorScripts.Count;
 
@@ -580,13 +582,31 @@ namespace ShootBlues {
                         FailedScripts.Add(current);
 
                     continue;
+                } else {
+                    if (!allScripts.Contains(current))
+                        allScripts.Add(current);
                 }
 
                 var head = toVisit.First;
 
                 bool resolved = true;
+
                 foreach (var dep in instance.Dependencies) {
                     if (visited.Contains(dep))
+                        continue;
+
+                    if (head != null)
+                        toVisit.AddBefore(head, dep);
+                    else
+                        toVisit.AddLast(dep);
+                    resolved = false;
+                }
+
+                foreach (var dep in instance.OptionalDependencies) {
+                    if (visited.Contains(dep))
+                        continue;
+
+                    if (!allScripts.Contains(dep))
                         continue;
 
                     if (head != null)
@@ -991,6 +1011,13 @@ rpcSend(result, id={1}L)", pythonText, messageID
             IManagedScript instance = null;
             LoadedScripts.TryGetValue(script, out instance);
             return instance;
+        }
+
+        public static T GetScriptInstance<T> (string scriptName)
+            where T : class, IManagedScript {
+
+            var instance = GetScriptInstance(new ScriptName(scriptName));
+            return instance as T;
         }
     }
 
