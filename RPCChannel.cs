@@ -76,7 +76,7 @@ namespace ShootBlues {
                 );
                 Win32.ReadProcessMemory(
                     handle.DangerousGetHandle(), new IntPtr(address.ToInt64() + 4),
-                    new IntPtr(pResult), size,
+                    new IntPtr(pResult), size - 4,
                     out bytesRead
                 );
             }

@@ -95,7 +95,7 @@
             this.UnloadScriptButton.Location = new System.Drawing.Point(131, 0);
             this.UnloadScriptButton.Name = "UnloadScriptButton";
             this.UnloadScriptButton.Size = new System.Drawing.Size(125, 27);
-            this.UnloadScriptButton.TabIndex = 2;
+            this.UnloadScriptButton.TabIndex = 1;
             this.UnloadScriptButton.Text = "&Unload Script";
             this.UnloadScriptButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.UnloadScriptButton.UseVisualStyleBackColor = true;
@@ -108,7 +108,7 @@
             this.LoadScriptButton.Location = new System.Drawing.Point(0, 0);
             this.LoadScriptButton.Name = "LoadScriptButton";
             this.LoadScriptButton.Size = new System.Drawing.Size(125, 27);
-            this.LoadScriptButton.TabIndex = 1;
+            this.LoadScriptButton.TabIndex = 0;
             this.LoadScriptButton.Text = "&Load Script...";
             this.LoadScriptButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.LoadScriptButton.UseVisualStyleBackColor = true;
@@ -122,7 +122,7 @@
             this.ReloadAllButton.Location = new System.Drawing.Point(283, 0);
             this.ReloadAllButton.Name = "ReloadAllButton";
             this.ReloadAllButton.Size = new System.Drawing.Size(100, 27);
-            this.ReloadAllButton.TabIndex = 3;
+            this.ReloadAllButton.TabIndex = 2;
             this.ReloadAllButton.Text = "&Reload All";
             this.ReloadAllButton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.ReloadAllButton.UseVisualStyleBackColor = true;
@@ -142,7 +142,7 @@
             this.ScriptsList.ShowLines = false;
             this.ScriptsList.ShowNodeToolTips = true;
             this.ScriptsList.Size = new System.Drawing.Size(383, 329);
-            this.ScriptsList.TabIndex = 4;
+            this.ScriptsList.TabIndex = 0;
             this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
             this.ScriptsList.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.ScriptsList_AfterSelect);
             this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
@@ -190,7 +190,7 @@
             this.SplitContainer.Panel2.Controls.Add(this.ScriptsPanel);
             this.SplitContainer.Size = new System.Drawing.Size(580, 362);
             this.SplitContainer.SplitterDistance = 193;
-            this.SplitContainer.TabIndex = 3;
+            this.SplitContainer.TabIndex = 1;
             // 
             // TabList
             // 
@@ -202,7 +202,7 @@
             this.TabList.Location = new System.Drawing.Point(0, 0);
             this.TabList.Name = "TabList";
             this.TabList.Size = new System.Drawing.Size(193, 362);
-            this.TabList.TabIndex = 3;
+            this.TabList.TabIndex = 0;
             this.TabList.SelectedIndexChanged += new System.EventHandler(this.TabList_SelectedIndexChanged);
             // 
             // ScriptsPanel

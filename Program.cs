@@ -1037,11 +1037,17 @@ rpcSend(result, id={1}L)", pythonText, messageID
         }
 
         public static string DecodeAsciiZ (this byte[] buffer) {
+            if ((buffer == null) || (buffer.Length == 0))
+                return null;
+
             int firstNull = Array.IndexOf(buffer, (byte)0, 0);
             return Encoding.ASCII.GetString(buffer, 0, firstNull);
         }
 
         public static string DecodeUTF8Z (this byte[] buffer) {
+            if ((buffer == null) || (buffer.Length == 0))
+                return null;
+
             int firstNull = Array.IndexOf(buffer, (byte)0, 0);
             return Encoding.UTF8.GetString(buffer, 0, firstNull);
         }
