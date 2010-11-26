@@ -129,6 +129,10 @@ namespace ShootBlues {
         }
 
         public void Dispose () {
+            foreach (var f in _AwaitingResponses.Values)
+                f.Dispose();
+            _AwaitingResponses.Clear();
+
             DestroyHandle();
         }
     }

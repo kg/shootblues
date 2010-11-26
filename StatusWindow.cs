@@ -27,6 +27,15 @@ namespace ShootBlues {
 
             _ActivePanel = _Panels["Scripts"] = ScriptsPanel;
             RefreshTabList();
+
+            SubscribeTo(Program.EventBus, Program.Profile, "RunningProcessAdded", (e) => RefreshProcessList());
+            SubscribeTo(Program.EventBus, Program.Profile, "RunningProcessRemoved", (e) => RefreshProcessList());
+            SubscribeTo(Program.EventBus, Program.Profile, "RunningProcessChanged", (e) => RefreshProcessList());
+
+            SubscribeTo(Program.EventBus, Program.Profile, "ScriptsChanged", (e) => RefreshScriptsList());
+
+            RefreshProcessList();
+            RefreshScriptsList();
         }
 
         protected void RefreshTabList () {
@@ -46,16 +55,12 @@ namespace ShootBlues {
             TabList.EndUpdate();
         }
 
-        public IEnumerator<object> ShowProcessList () {
-            while (true) {
-                RunningProcessList.BeginUpdate();
-                RunningProcessList.Items.Clear();
-                foreach (var pi in Program.RunningProcesses)
-                    RunningProcessList.Items.Add(pi);
-                RunningProcessList.EndUpdate();
-
-                yield return Program.RunningProcessesChanged.Wait();
-            }
+        public void RefreshProcessList () {
+            RunningProcessList.BeginUpdate();
+            RunningProcessList.Items.Clear();
+            foreach (var pi in Program.RunningProcesses)
+                RunningProcessList.Items.Add(pi);
+            RunningProcessList.EndUpdate();
         }
 
         private TreeNode BuildScriptNode (ScriptName script, bool optional, out bool shouldExpand) {
@@ -112,36 +117,32 @@ namespace ShootBlues {
             return item;
         }
 
-        public IEnumerator<object> ShowScriptList () {
+        public void RefreshScriptsList () {
             Filename selectedScript;
 
-            while (true) {
-                if (ScriptsList.SelectedNode != null)
-                    selectedScript = ScriptsList.SelectedNode.Tag as Filename;
-                else
-                    selectedScript = null;
+            if (ScriptsList.SelectedNode != null)
+                selectedScript = ScriptsList.SelectedNode.Tag as Filename;
+            else
+                selectedScript = null;
 
-                ScriptsList.BeginUpdate();
-                ScriptsList.Nodes.Clear();
-                while (ScriptImageList.Images.Count > 2)
-                    ScriptImageList.Images.RemoveAt(2);
+            ScriptsList.BeginUpdate();
+            ScriptsList.Nodes.Clear();
+            while (ScriptImageList.Images.Count > 2)
+                ScriptImageList.Images.RemoveAt(2);
 
-                bool temp = false;
-                foreach (var script in Program.Scripts) {
-                    var item = BuildScriptNode(script.Name, false, out temp);
+            bool temp = false;
+            foreach (var script in Program.Scripts) {
+                var item = BuildScriptNode(script.Name, false, out temp);
 
-                    ScriptsList.Nodes.Add(item);
-                    if (script == selectedScript)
-                        ScriptsList.SelectedNode = item;
-                }
-
-                ScriptsList.EndUpdate();
-
-                UnloadScriptButton.Enabled = (ScriptsList.SelectedNode != null) &&
-                    (ScriptsList.SelectedNode.Parent == null);
-
-                yield return Program.ScriptsChanged.Wait();
+                ScriptsList.Nodes.Add(item);
+                if (script == selectedScript)
+                    ScriptsList.SelectedNode = item;
             }
+
+            ScriptsList.EndUpdate();
+
+            UnloadScriptButton.Enabled = (ScriptsList.SelectedNode != null) &&
+                (ScriptsList.SelectedNode.Parent == null);
         }
 
         private void RunPythonMenu_Click (object sender, EventArgs e) {
@@ -188,9 +189,6 @@ namespace ShootBlues {
 
         private void StatusWindow_Shown (object sender, EventArgs e) {
             ScriptsPage_SizeChanged(null, EventArgs.Empty);
-
-            Start(ShowProcessList());
-            Start(ShowScriptList());
         }
 
         private void ScriptsList_DragOver (object sender, DragEventArgs e) {
@@ -226,7 +224,8 @@ namespace ShootBlues {
                 if (!alreadyInList)
                     Program.Scripts.Add(filename);
             }
-            Program.ScriptsChanged.Set();
+
+            Program.EventBus.Broadcast(Program.Profile, "OnScriptsAdded", filenames);
         }
 
         private void ReloadAllButton_Click (object sender, EventArgs e) {
@@ -236,7 +235,8 @@ namespace ShootBlues {
         private void UnloadScriptButton_Click (object sender, EventArgs e) {
             var filename = ScriptsList.SelectedNode.Tag as Filename;
             Program.Scripts.Remove(filename);
-            Program.ScriptsChanged.Set();
+
+            Program.EventBus.Broadcast(Program.Profile, "OnScriptRemoved", filename);
         }
 
         public void ShowConfigurationPanel (string title, IConfigurationPanel panel) {

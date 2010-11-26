@@ -132,6 +132,7 @@ void callFunction (const char * moduleName, const char * functionName, const cha
     PyObject * argsString = PyString_FromString(argumentsJson);
     args = PyTuple_Pack(1, argsString);
     PyObject * result = PyObject_CallObject(loads, args);
+    Py_XDECREF(loads);
     Py_XDECREF(args);
     Py_XDECREF(argsString);
     if (!result)
@@ -143,14 +144,18 @@ void callFunction (const char * moduleName, const char * functionName, const cha
   PyObject * result = PyObject_CallObject(function, args);
 
   if (result) {
-    PyObject * resultRepr = PyObject_Repr(result);
+    PyObject * dumps = PyObject_GetAttrString(g_jsonModule, "dumps");
     Py_XDECREF(args);
-    args = PyTuple_Pack(1, resultRepr);
-    PyObject * kwargs = Py_BuildValue("{s:I}", "id", messageId);
+    args = PyTuple_Pack(1, result);
+    PyObject * resultJson = PyObject_CallObject(dumps, args);
+    Py_XDECREF(dumps);
+    Py_XDECREF(args);
     Py_DECREF(result);
+    args = PyTuple_Pack(1, resultJson);
+    PyObject * kwargs = Py_BuildValue("{s:I}", "id", messageId);
     result = rpcSend(0, args, kwargs);
     Py_DECREF(kwargs);
-    Py_DECREF(resultRepr);
+    Py_DECREF(resultJson);
   } else
     errorHandler(messageId);
 

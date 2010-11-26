@@ -5,6 +5,8 @@ using System.Text;
 using Squared.Task;
 using System.Web.Script.Serialization;
 using Squared.Task.Data.Mapper;
+using Squared.Util.Event;
+using Squared.Task.Data;
 
 namespace ShootBlues {
     [Mapper]
@@ -20,22 +22,45 @@ namespace ShootBlues {
     }
 
     public abstract class ManagedScript : IManagedScript {
-        public readonly Signal PreferencesChanged = new Signal();
-
         protected HashSet<ScriptName> _Dependencies = new HashSet<ScriptName>();
         protected HashSet<ScriptName> _OptionalDependencies = new HashSet<ScriptName>();
         protected Dictionary<string, object> _Preferences = new Dictionary<string, object>();
         protected IFuture _PreferencesTask;
+        protected EventSubscription _PreferenceChangedEvt;
 
         public ScriptName Name {
             get;
             private set;
         }
 
+        protected ConnectionWrapper Database {
+            get {
+                return Program.Database;
+            }
+        }
+
+        protected TaskScheduler Scheduler {
+            get {
+                return Program.Scheduler;
+            }
+        }
+
+        protected EventBus EventBus {
+            get {
+                return Program.EventBus;
+            }
+        }
+
+        protected IProfile Profile {
+            get {
+                return Program.Profile;
+            }
+        }
+
         public ManagedScript (ScriptName name) {
             Name = name;
 
-            _PreferencesTask = Program.Scheduler.Start(PreferencesTask(), TaskExecutionPolicy.RunAsBackgroundTask);
+            _PreferenceChangedEvt = EventBus.Subscribe<string>(this, "PreferenceChanged", Scheduler, OnPreferenceChanged);
         }
 
         public IEnumerable<ScriptName> Dependencies {
@@ -59,16 +84,16 @@ namespace ShootBlues {
         }
 
         public IEnumerator<object> SetPreference<T> (string prefName, T value) {
-            using (var query = Program.Database.BuildQuery(
+            using (var query = Database.BuildQuery(
                 "replace into prefs (scriptName, prefName, value) values (?, ?, ?)"
             ))
                 yield return query.ExecuteNonQuery(Name, prefName, value);
 
-            PreferencesChanged.Set();
+            EventBus.Broadcast(this, "PreferenceChanged", prefName);
         }
 
         public Future<T> GetPreference<T> (string prefName) {
-            using (var query = Program.Database.BuildQuery(
+            using (var query = Database.BuildQuery(
                 "select value from prefs where scriptName = ? and prefName = ?"
             ))
                 return query.ExecuteScalar<T>(Name, prefName);
@@ -77,7 +102,7 @@ namespace ShootBlues {
         public IEnumerator<object> GetPreferences () {
             var dict = new Dictionary<string, object>();
 
-            using (var query = Program.Database.BuildQuery(
+            using (var query = Database.BuildQuery(
                 "select prefName, value from prefs where scriptName = ?"
             ))
             using (var e = query.Execute<PrefEntry>(Name))
@@ -130,25 +155,12 @@ namespace ShootBlues {
             yield break;
         }
 
-        protected IEnumerator<object> PreferencesTask () {
-            while (true) {
-                yield return PreferencesChanged.Wait();
-
-                yield return new Start(
-                    OnPreferencesChanged(), TaskExecutionPolicy.RunAsBackgroundTask
-                );
-            }
-        }
-
-        protected virtual IEnumerator<object> OnPreferencesChanged () {
+        protected virtual IEnumerator<object> OnPreferenceChanged (EventInfo evt, string prefName) {
             yield break;
         }
 
         public virtual void Dispose () {
-            if (_PreferencesTask != null) {
-                _PreferencesTask.Dispose();
-                _PreferencesTask = null;
-            }
+            _PreferenceChangedEvt.Dispose();
         }
     }
 }

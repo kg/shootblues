@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
 using System.Data.SQLite;
 using Squared.Task.Data;
+using Squared.Util.Event;
 
 namespace ShootBlues {
     public class ScriptName {
@@ -234,11 +235,10 @@ namespace ShootBlues {
 
         internal static Dictionary<ScriptName, IManagedScript> LoadedScripts = new Dictionary<ScriptName, IManagedScript>();
 
-        public static readonly Signal RunningProcessesChanged = new Signal();
-        public static readonly Signal ScriptsChanged = new Signal();
         public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
         public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
         public static readonly HashSet<ScriptName> FailedScripts = new HashSet<ScriptName>();
+        public static readonly EventBus EventBus = new EventBus();
         public static NotifyIcon TrayIcon;
         public static IProfile Profile;
         public static TaskScheduler Scheduler;
@@ -338,12 +338,13 @@ namespace ShootBlues {
 
                     loadingWindow.Close();
 
-                    yield return new Start(
-                        ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
-                    );
+                    EventBus.Subscribe(Profile, "OnScriptsAdded", Scheduler, OnScriptsChanging);
+                    EventBus.Subscribe(Profile, "OnScriptRemoved", Scheduler, OnScriptsChanging);
 
                     TrayIcon.Text = TrayIcon.Text + " - " + Profile.Name;
                     TrayIcon.Visible = true;
+
+                    yield return OnScriptsChanging(null);
 
                     yield return Profile.Run();
                 } finally {
@@ -642,37 +643,32 @@ namespace ShootBlues {
             }
         }
 
-        private static IEnumerator<object> ScriptLoaderTask () {
-            while (true) {
-                using (var loadingWindow = new LoadingWindow()) {
-                    loadingWindow.SetStatus("Loading scripts", null);
-                    loadingWindow.Show();
+        private static IEnumerator<object> OnScriptsChanging (Squared.Util.Event.EventInfo evt) {
+            yield return new Start(SaveScriptsToDatabase(), TaskExecutionPolicy.RunAsBackgroundTask);
 
-                    var buildScriptList = new RunToCompletion<ScriptName[]>(
-                        BuildOrderedScriptList(loadingWindow), TaskExecutionPolicy.RunWhileFutureLives
-                    );
-                    yield return buildScriptList;
+            using (var loadingWindow = new LoadingWindow()) {
+                loadingWindow.SetStatus("Loading scripts", null);
+                loadingWindow.Show();
 
-                    var scriptList = buildScriptList.Result;
+                var buildScriptList = new RunToCompletion<ScriptName[]>(
+                    BuildOrderedScriptList(loadingWindow), TaskExecutionPolicy.RunWhileFutureLives
+                );
+                yield return buildScriptList;
 
-                    var loadedScriptNames = LoadedScripts.Keys.ToArray();
-                    foreach (var scriptName in loadedScriptNames)
-                        if (!scriptList.Contains(scriptName))
-                            yield return UnloadScript(scriptName);
+                var scriptList = buildScriptList.Result;
 
-                    foreach (var scriptName in scriptList)
-                        if (!LoadedScripts.ContainsKey(scriptName))
-                            yield return LoadScript(scriptName, loadingWindow);
+                var loadedScriptNames = LoadedScripts.Keys.ToArray();
+                foreach (var scriptName in loadedScriptNames)
+                    if (!scriptList.Contains(scriptName))
+                        yield return UnloadScript(scriptName);
 
-                    yield return ReloadAllScripts(scriptList);
+                foreach (var scriptName in scriptList)
+                    if (!LoadedScripts.ContainsKey(scriptName))
+                        yield return LoadScript(scriptName, loadingWindow);
 
-                    // Dirty trick to make other subscribers refresh their status
-                    ScriptsChanged.Set();
-                }
+                yield return ReloadAllScripts(scriptList);
 
-                yield return ScriptsChanged.Wait();
-
-                yield return new Start(SaveScriptsToDatabase(), TaskExecutionPolicy.RunAsBackgroundTask);
+                EventBus.Broadcast(Profile, "ScriptsChanged", scriptList); 
             }
         }
 
@@ -701,7 +697,7 @@ namespace ShootBlues {
                 var threadId = new Future<UInt32>();
 
                 RunningProcesses.Add(pi);
-                RunningProcessesChanged.Set();
+                EventBus.Broadcast(Profile, "RunningProcessAdded", pi);
 
                 var fCodeRegion = Future.RunInThread(() =>
                     ProcessInjector.Inject(process, payload.Result, pi.Channel.Handle, payloadResult, threadId)
@@ -713,14 +709,12 @@ namespace ShootBlues {
                 pi.Channel.RemoteThreadId = threadId.Result;
 
                 using (fCodeRegion.Result) {
-                    RunningProcessesChanged.Set();
-
                     yield return Future.WaitForFirst(
                         pi.Channel.Receive(), processExit
                     );
 
                     pi.Status = "Loading scripts into process";
-                    RunningProcessesChanged.Set();
+                    EventBus.Broadcast(Profile, "RunningProcessChanged", pi);
 
                     var buildScriptList = new RunToCompletion<ScriptName[]>(
                         BuildOrderedScriptList(null), TaskExecutionPolicy.RunWhileFutureLives
@@ -738,7 +732,7 @@ namespace ShootBlues {
 
                     if (!process.HasExited) {
                         pi.Status = "Scripts loaded";
-                        RunningProcessesChanged.Set();
+                        EventBus.Broadcast(Profile, "RunningProcessChanged", pi);
 
                         var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
 
@@ -749,16 +743,15 @@ namespace ShootBlues {
 
                         if (payloadResult.Completed) {
                             pi.Status = String.Format("Payload terminated with exit code {0}.", payloadResult.Result);
-                            RunningProcessesChanged.Set();
+                            EventBus.Broadcast(Profile, "RunningProcessChanged", pi);
                         }
                     }
                 }
 
                 yield return processExit;
                 RunningProcesses.Remove(pi);
+                EventBus.Broadcast(Profile, "RunningProcessRemoved", pi);
             }
-
-            RunningProcessesChanged.Set();
         }
 
         public static Filename FindScript (ScriptName script) {
@@ -906,7 +899,7 @@ namespace ShootBlues {
             var messageID = process.Channel.GetMessageID();
             var fResult = process.Channel.WaitForMessage(messageID);
 
-            if (pythonText.Contains("\n") || pythonText.Contains("return "))
+            if (pythonText.Contains("\n") || pythonText.Contains("return ") || pythonText.StartsWith("print "))
                 pythonText = "  " + pythonText.Replace("\t", "  ").Replace("\n", "\n  ");
             else
                 pythonText = "  return " + pythonText;
@@ -948,6 +941,27 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 FunctionName = functionName,
                 Text = argsJson
             }, true);
+        }
+
+        public static Future<T> CallFunction<T> (ProcessInfo process, string moduleName, string functionName, params object[] arguments) {
+            var f = new Future<T>();
+            var serializer = new JavaScriptSerializer();
+
+            var inner = CallFunction(process, moduleName, functionName, arguments);
+            inner.RegisterOnComplete((_) => {
+                if (!inner.Failed) {
+                    try {
+                        var json = inner.Result.DecodeUTF8Z();
+                        f.Complete(serializer.Deserialize<T>(json));
+                    } catch (Exception ex) {
+                        f.Fail(ex);
+                    }
+                } else
+                    f.Fail(inner.Error);
+            });
+            inner.RegisterOnDispose((_) => f.Dispose());
+
+            return f;
         }
 
         public static IEnumerator<object> ReloadAllScripts () {
@@ -1025,6 +1039,11 @@ rpcSend(result, id={1}L)", pythonText, messageID
         public static string DecodeAsciiZ (this byte[] buffer) {
             int firstNull = Array.IndexOf(buffer, (byte)0, 0);
             return Encoding.ASCII.GetString(buffer, 0, firstNull);
+        }
+
+        public static string DecodeUTF8Z (this byte[] buffer) {
+            int firstNull = Array.IndexOf(buffer, (byte)0, 0);
+            return Encoding.UTF8.GetString(buffer, 0, firstNull);
         }
 
         public static T PopFirst<T> (this LinkedList<T> list) {
