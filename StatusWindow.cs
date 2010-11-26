@@ -10,7 +10,8 @@ using System.IO;
 
 namespace ShootBlues {
     public partial class StatusWindow : TaskForm, IStatusWindow {
-        IConfigurationPanel _ActivePanel = null;
+        Control _ActivePanel = null;
+        Dictionary<string, Control> _Panels = new Dictionary<string, Control>();
 
         public StatusWindow (TaskScheduler scheduler)
             : base(scheduler) {
@@ -19,6 +20,30 @@ namespace ShootBlues {
             Text = Text.Replace(
                 "$version", String.Format("v{0}", Application.ProductVersion)
             ).Replace("$profile", Program.Profile.Name);
+
+            SplitContainer.SplitterDistance = 130;
+            SplitContainer.Panel1MinSize = 100;
+            SplitContainer.Panel2MinSize = 200;
+
+            _ActivePanel = _Panels["Scripts"] = ScriptsPanel;
+            RefreshTabList();
+        }
+
+        protected void RefreshTabList () {
+            string oldSelection = (TabList.SelectedItem as string) ?? "Scripts";
+
+            TabList.BeginUpdate();
+            TabList.Items.Clear();
+            TabList.Items.Add("Scripts");
+            TabList.Items.AddRange((
+                from k in _Panels.Keys 
+                where k != "Scripts" orderby k select k
+            ).ToArray());
+            try {
+                TabList.SelectedItem = oldSelection;
+            } catch {
+            }
+            TabList.EndUpdate();
         }
 
         public IEnumerator<object> ShowProcessList () {
@@ -214,28 +239,16 @@ namespace ShootBlues {
             Program.ScriptsChanged.Set();
         }
 
-        public TabPage ShowConfigurationPanel (string title, IConfigurationPanel panel) {
-            TabPage tabPage = panel as TabPage;
-
-            if (tabPage == null) {
-                var ctl = (Control)panel;
-                tabPage = new TabPage();
-                tabPage.Controls.Add(ctl);
-                ctl.Dock = DockStyle.Fill;
-            }
-
-            tabPage.Text = title;
-            tabPage.Name = title;
-            Tabs.TabPages.Add(tabPage);
-            return tabPage;
-        }
-
-        public void HideConfigurationPanel (TabPage page) {
-            Tabs.TabPages.Remove(page);
+        public void ShowConfigurationPanel (string title, IConfigurationPanel panel) {
+            title = String.Intern(title);
+            _Panels[title] = (Control)panel;
+            RefreshTabList();
         }
 
         public void HideConfigurationPanel (string title) {
-            Tabs.TabPages.RemoveByKey(title);
+            title = String.Intern(title);
+            _Panels.Remove(title);
+            RefreshTabList();
         }
 
         private void ScriptsList_AfterSelect (object sender, TreeViewEventArgs e) {
@@ -247,18 +260,43 @@ namespace ShootBlues {
             ScriptsList.Height = ButtonPanel.Top - 4;
         }
 
-        private void Tabs_SelectedIndexChanged (object sender, EventArgs e) {
-            var selectedTab = Tabs.SelectedTab;
+        public void SelectTab (string name) {
+            name = String.Intern(name);
+            TabList.SelectedItem = name;
+        }
 
-            IConfigurationPanel configPanel = selectedTab as IConfigurationPanel;
-            if ((configPanel == null) && (selectedTab.Controls.Count > 0))
-                configPanel = selectedTab.Controls[0] as IConfigurationPanel;
+        private void TabList_SelectedIndexChanged (object sender, EventArgs e) {
+            var tabName = TabList.SelectedItem as string;
 
-            if (_ActivePanel != null)
-                Start(_ActivePanel.SaveConfiguration());
-            _ActivePanel = configPanel;
-            if (configPanel != null)
-                Start(configPanel.LoadConfiguration());
+            if (tabName == null)
+                return;
+
+            using (new ControlWaitCursor(this)) {
+                var panel = _Panels[tabName];
+                SplitContainer.Panel2.SuspendLayout();
+
+                if (_ActivePanel != null) {
+                    var iface = _ActivePanel as IConfigurationPanel;
+                    if (iface != null)
+                        Scheduler.WaitFor(iface.SaveConfiguration());
+
+                    SplitContainer.Panel2.Controls.Remove(_ActivePanel);
+                    _ActivePanel.Dock = DockStyle.None;
+                }
+
+                _ActivePanel = panel;
+                {
+                    var iface = _ActivePanel as IConfigurationPanel;
+                    if (iface != null)
+                        Scheduler.WaitFor(iface.LoadConfiguration());
+                }
+
+                panel.SuspendLayout();
+                panel.Dock = DockStyle.Fill;
+                SplitContainer.Panel2.Controls.Add(panel);
+                SplitContainer.Panel2.ResumeLayout(true);
+                panel.ResumeLayout(true);
+            }
         }
     }
 }

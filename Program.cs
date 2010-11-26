@@ -239,6 +239,7 @@ namespace ShootBlues {
         public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
         public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
         public static readonly HashSet<ScriptName> FailedScripts = new HashSet<ScriptName>();
+        public static NotifyIcon TrayIcon;
         public static IProfile Profile;
         public static TaskScheduler Scheduler;
         public static ConnectionWrapper Database;
@@ -302,12 +303,12 @@ namespace ShootBlues {
 
             using (TrayMenu)
             using (var loadingWindow = new LoadingWindow())
-            using (var trayIcon = new NotifyIcon {
+            using (TrayIcon = new NotifyIcon {
                 Text = "Shoot Blues v" + Application.ProductVersion,
                 Icon = Properties.Resources.icon,
                 ContextMenuStrip = TrayMenu
             }) {
-                trayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
+                TrayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
 
                 loadingWindow.SetStatus("Loading profile", null);
                 loadingWindow.Show();
@@ -341,12 +342,12 @@ namespace ShootBlues {
                         ScriptLoaderTask(), TaskExecutionPolicy.RunAsBackgroundTask
                     );
 
-                    trayIcon.Text = trayIcon.Text + " - " + Profile.Name;
-                    trayIcon.Visible = true;
+                    TrayIcon.Text = TrayIcon.Text + " - " + Profile.Name;
+                    TrayIcon.Visible = true;
 
                     yield return Profile.Run();
                 } finally {
-                    trayIcon.Visible = false;
+                    TrayIcon.Visible = false;
                 }
             }
         }
@@ -519,10 +520,7 @@ namespace ShootBlues {
                 StatusWindowInstance.Focus();
 
                 if (initialPage != null)
-                    try {
-                        StatusWindowInstance.Tabs.SelectedTab = StatusWindowInstance.Tabs.TabPages[initialPage];
-                    } catch {
-                    }
+                    StatusWindowInstance.SelectTab(initialPage);
 
                 yield break;
             }
@@ -540,10 +538,7 @@ namespace ShootBlues {
                 }
 
                 if (initialPage != null)
-                    try {
-                        StatusWindowInstance.Tabs.SelectedTab = StatusWindowInstance.Tabs.TabPages[initialPage];
-                    } catch {
-                    }
+                    StatusWindowInstance.SelectTab(initialPage);
 
                 yield return StatusWindowInstance.Show();
             }

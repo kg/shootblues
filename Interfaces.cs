@@ -34,8 +34,7 @@ namespace ShootBlues {
     }
 
     public interface IStatusWindow : ITaskOwner {
-        TabPage ShowConfigurationPanel (string name, IConfigurationPanel panel);
-        void HideConfigurationPanel (TabPage page);
+        void ShowConfigurationPanel (string name, IConfigurationPanel panel);
         void HideConfigurationPanel (string name);
     }
 
