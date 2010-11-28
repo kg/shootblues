@@ -228,6 +228,7 @@ namespace ShootBlues {
 
     public static class Program {
         private static StatusWindow StatusWindowInstance = null;
+        private static ErrorDialog ErrorDialogInstance = null;
         private static ContextMenuStrip TrayMenu = null;
         private static Dictionary<ScriptName, SignalFuture> LoadingScripts = new Dictionary<ScriptName, SignalFuture>();
         private static HashSet<string> AttachedDatabases = new HashSet<string>();
@@ -290,9 +291,36 @@ namespace ShootBlues {
         }
 
         private static bool OnTaskError (Exception error) {
-            MessageBox.Show(error.ToString(), "Error in background task");
+            ShowErrorMessage(error.ToString());
 
             return true;
+        }
+
+        public static void ShowErrorMessage (string text) {
+            ShowErrorMessage(text, null);
+        }
+
+        public static void ShowErrorMessage (string text, ProcessInfo process) {
+            string title = "Error in background task";
+            if (process != null)
+                title = String.Format("Error in process {0}", process.Process.Id);
+
+            if (ErrorDialogInstance == null) {
+                ErrorDialogInstance = new ErrorDialog(Scheduler);
+                Scheduler.Start(ErrorDialogTask(), TaskExecutionPolicy.RunAsBackgroundTask);
+            } else {
+                ErrorDialogInstance.Activate();
+                ErrorDialogInstance.Focus();
+            }
+
+            ErrorDialogInstance.AddError(text, title);
+        }
+
+        private static IEnumerator<object> ErrorDialogTask () {
+            using (ErrorDialogInstance)
+                yield return ErrorDialogInstance.Show();
+
+            ErrorDialogInstance = null;
         }
 
         private static IEnumerator<object> MainTask () {
@@ -489,9 +517,8 @@ namespace ShootBlues {
 
                 if (instance == null) {
                     validProfile = false;
-                    MessageBox.Show(
-                        String.Format("The file '{0}' is not a valid profile.", profilePath),
-                        "Error"
+                    Program.ShowErrorMessage(
+                        String.Format("The file '{0}' is not a valid profile.", profilePath)
                     );
                 }
             }
@@ -839,7 +866,7 @@ namespace ShootBlues {
 
             if (instance == null) {
                 if (scriptPath != null)
-                    MessageBox.Show(String.Format("The file '{0}' is not a Shoot Blues script.", scriptPath), "Error");
+                    Program.ShowErrorMessage(String.Format("The file '{0}' is not a Shoot Blues script.", scriptPath));
             } else {
                 yield return instance.Initialize();
 
@@ -1012,7 +1039,7 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 yield return fMessage;
 
                 var errorText = fMessage.Result.DecodeAsciiZ();
-                MessageBox.Show(errorText, String.Format("Message from process {0}", pi.Process.Id));
+                Program.ShowErrorMessage(errorText, pi);
             }
         }
 

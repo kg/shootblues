@@ -158,7 +158,7 @@ namespace ShootBlues {
             yield return f;
             byte[] result = f.Result;
             if ((result != null) && (result.Length > 0))
-                MessageBox.Show(result.DecodeAsciiZ(), "Result");
+                MessageBox.Show(this, result.DecodeAsciiZ(), String.Format("Result from process {0}", process.Process.Id));
         }
 
         private void RunningProcessList_MouseDown (object sender, MouseEventArgs e) {

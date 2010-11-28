@@ -361,6 +361,8 @@ PyObject * loadModule (PyObject * self, PyObject * args) {
 
     if (module != NULL) {
       PyObject_SetAttrString(module, "__loader__", g_module);
+      PyObject_SetAttrString(module, "__path__", PyString_FromString(moduleName + 11));
+      PyObject_SetAttrString(module, "__package__", PyString_FromString("shootblues"));
       Py_DECREF(codeObject);
     } else {
       Py_DECREF(codeObject);
