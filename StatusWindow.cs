@@ -291,11 +291,9 @@ namespace ShootBlues {
                         Scheduler.WaitFor(iface.LoadConfiguration());
                 }
 
-                panel.SuspendLayout();
                 panel.Dock = DockStyle.Fill;
                 SplitContainer.Panel2.Controls.Add(panel);
                 SplitContainer.Panel2.ResumeLayout(true);
-                panel.ResumeLayout(true);
             }
         }
     }
