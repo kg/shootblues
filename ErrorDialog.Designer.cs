@@ -45,7 +45,7 @@
             this.ErrorText.Name = "ErrorText";
             this.ErrorText.ReadOnly = true;
             this.ErrorText.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-            this.ErrorText.Size = new System.Drawing.Size(369, 180);
+            this.ErrorText.Size = new System.Drawing.Size(469, 230);
             this.ErrorText.TabIndex = 1;
             this.ToolTips.SetToolTip(this.ErrorText, "Error Text");
             this.ErrorText.WordWrap = false;
@@ -55,7 +55,7 @@
             this.NextError.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.NextError.Enabled = false;
             this.NextError.Image = ((System.Drawing.Image)(resources.GetObject("NextError.Image")));
-            this.NextError.Location = new System.Drawing.Point(356, 234);
+            this.NextError.Location = new System.Drawing.Point(456, 284);
             this.NextError.Name = "NextError";
             this.NextError.Size = new System.Drawing.Size(26, 26);
             this.NextError.TabIndex = 4;
@@ -68,7 +68,7 @@
             this.PreviousError.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.PreviousError.Enabled = false;
             this.PreviousError.Image = ((System.Drawing.Image)(resources.GetObject("PreviousError.Image")));
-            this.PreviousError.Location = new System.Drawing.Point(324, 234);
+            this.PreviousError.Location = new System.Drawing.Point(424, 284);
             this.PreviousError.Name = "PreviousError";
             this.PreviousError.Size = new System.Drawing.Size(26, 26);
             this.PreviousError.TabIndex = 3;
@@ -80,7 +80,7 @@
             // 
             this.ClearErrors.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.ClearErrors.Image = ((System.Drawing.Image)(resources.GetObject("ClearErrors.Image")));
-            this.ClearErrors.Location = new System.Drawing.Point(12, 234);
+            this.ClearErrors.Location = new System.Drawing.Point(12, 284);
             this.ClearErrors.Name = "ClearErrors";
             this.ClearErrors.Size = new System.Drawing.Size(26, 26);
             this.ClearErrors.TabIndex = 2;
@@ -97,7 +97,7 @@
             this.ErrorTitle.Margin = new System.Windows.Forms.Padding(4);
             this.ErrorTitle.Name = "ErrorTitle";
             this.ErrorTitle.ReadOnly = true;
-            this.ErrorTitle.Size = new System.Drawing.Size(369, 26);
+            this.ErrorTitle.Size = new System.Drawing.Size(469, 26);
             this.ErrorTitle.TabIndex = 0;
             this.ToolTips.SetToolTip(this.ErrorTitle, "Error Title");
             this.ErrorTitle.WordWrap = false;
@@ -106,7 +106,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(394, 272);
+            this.ClientSize = new System.Drawing.Size(494, 322);
             this.Controls.Add(this.ErrorTitle);
             this.Controls.Add(this.ClearErrors);
             this.Controls.Add(this.PreviousError);

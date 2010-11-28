@@ -14,6 +14,15 @@ using Squared.Task.Data;
 using Squared.Util.Event;
 
 namespace ShootBlues {
+    public class PythonException : Exception {
+        public ProcessInfo Process;
+
+        public PythonException (ProcessInfo process, string traceback)
+            : base(traceback) {
+            Process = process;
+        }
+    }
+
     public class ScriptName {
         public readonly string Name;
         public readonly string DefaultSearchPath;
@@ -291,7 +300,12 @@ namespace ShootBlues {
         }
 
         private static bool OnTaskError (Exception error) {
-            ShowErrorMessage(error.ToString());
+            var pye = error as PythonException;
+
+            if (pye != null)
+                ShowErrorMessage(pye.Message, pye.Process);
+            else
+                ShowErrorMessage(error.ToString());
 
             return true;
         }
@@ -952,34 +966,44 @@ rpcSend(result, id={1}L)", pythonText, messageID
             return fResult;
         }
 
-        public static Future<byte[]> CallFunction (ProcessInfo process, string moduleName, string functionName, params object[] arguments) {
-            if ((arguments != null) && (arguments.Length == 0))
-                arguments = null;
-
-            string argsJson = null;
-            if (arguments != null) {
-                var serializer = new JavaScriptSerializer();
-                argsJson = serializer.Serialize(arguments);
-            }
-
-            return process.Channel.Send(new RPCMessage {
-                Type = RPCMessageType.CallFunction,
-                ModuleName = moduleName,
-                FunctionName = functionName,
-                Text = argsJson
-            }, true);
+        public static IFuture CallFunction (ProcessInfo process, string moduleName, string functionName, params object[] arguments) {
+            return CallFunction<object>(process, moduleName, functionName, arguments);
         }
 
         public static Future<T> CallFunction<T> (ProcessInfo process, string moduleName, string functionName, params object[] arguments) {
             var f = new Future<T>();
             var serializer = new JavaScriptSerializer();
 
-            var inner = CallFunction(process, moduleName, functionName, arguments);
+            if ((arguments != null) && (arguments.Length == 0))
+                arguments = null;
+
+            string argsJson = null;
+            if (arguments != null)
+                argsJson = serializer.Serialize(arguments);
+
+            var inner = process.Channel.Send(new RPCMessage {
+                Type = RPCMessageType.CallFunction,
+                ModuleName = moduleName,
+                FunctionName = functionName,
+                Text = argsJson
+            }, true);
+
             inner.RegisterOnComplete((_) => {
                 if (!inner.Failed) {
                     try {
                         var json = inner.Result.DecodeUTF8Z();
-                        f.Complete(serializer.Deserialize<T>(json));
+
+                        try {
+                            f.Complete(serializer.Deserialize<T>(json));
+                        } catch (ArgumentException) {
+                            string errorText;
+                            if (arguments != null)
+                                errorText = String.Format("Error when calling {0}.{1} with arguments {2}:\r\n{3}", moduleName, functionName, argsJson, json);
+                            else
+                                errorText = String.Format("Error when calling {0}.{1}:\r\n{2}", moduleName, functionName, json);
+
+                            f.Fail(new PythonException(process, errorText));
+                        }
                     } catch (Exception ex) {
                         f.Fail(ex);
                     }
@@ -1005,14 +1029,14 @@ rpcSend(result, id={1}L)", pythonText, messageID
             foreach (var pi in RunningProcesses) {
                 foreach (var scriptName in scriptList.Reverse()) {
                     if (pi.LoadedScripts.Contains(scriptName)) {
-                        yield return LoadedScripts[scriptName].UnloadFrom(pi);
+                        yield return new RunAsBackground(LoadedScripts[scriptName].UnloadFrom(pi));
                         pi.LoadedScripts.Remove(scriptName);
                     }
                 }
             }
 
             foreach (var scriptName in scriptList)
-                yield return LoadedScripts[scriptName].Reload();
+                yield return new RunAsBackground(LoadedScripts[scriptName].Reload());
 
             foreach (var pi in RunningProcesses)
                 yield return LoadScriptsInto(pi, scriptList);
@@ -1020,7 +1044,7 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
         public static IEnumerator<object> LoadScriptsInto (ProcessInfo pi, ScriptName[] scriptList) {
             foreach (var script in scriptList) {
-                yield return LoadedScripts[script].LoadInto(pi);
+                yield return new RunAsBackground(LoadedScripts[script].LoadInto(pi));
                 pi.LoadedScripts.Add(script);
             }
 
@@ -1030,7 +1054,7 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 }));
 
             foreach (var script in scriptList)
-                yield return LoadedScripts[script].LoadedInto(pi);
+                yield return new RunAsBackground(LoadedScripts[script].LoadedInto(pi));
         }
 
         private static IEnumerator<object> RPCTask (ProcessInfo pi) {

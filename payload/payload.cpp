@@ -135,8 +135,11 @@ void callFunction (const char * moduleName, const char * functionName, const cha
     Py_XDECREF(loads);
     Py_XDECREF(args);
     Py_XDECREF(argsString);
-    if (!result)
+    if (!result) {
+      Py_XDECREF(module);
+      Py_XDECREF(function);
       return errorHandler(messageId);
+    }
     args = PySequence_Tuple(result);
     Py_XDECREF(result);
   }
