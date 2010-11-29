@@ -107,7 +107,6 @@ namespace ShootBlues {
         }
 
         protected IEnumerator<object> CallFunction (string moduleName, string functionName, params object[] arguments) {
-            Console.WriteLine("{0}.{1}", moduleName, functionName);
             foreach (var process in Program.GetProcessesRunningScript(this))
                 yield return Program.CallFunction(process, moduleName, functionName, arguments);
         }

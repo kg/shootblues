@@ -4,13 +4,15 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
+using System.Linq;
 using ShootBlues;
 using Squared.Util.Bind;
 using System.IO;
 using Squared.Task;
+using System.Collections;
 
 namespace ShootBlues.Script {
-    public partial class SimpleConfigPanel<T> : TaskUserControl, IConfigurationPanel
+    public class SimpleConfigPanel<T> : TaskUserControl, IConfigurationPanel
         where T : ManagedScript {
 
         public IBoundMember[] Prefs;
@@ -20,6 +22,34 @@ namespace ShootBlues.Script {
             : base(Program.Scheduler) {
             Script = script;
             Prefs = new IBoundMember[0];
+        }
+
+        protected override void OnLoad (EventArgs e) {
+            base.OnLoad(e);
+
+            WireEventListeners(this.Controls.Cast<Control>());
+        }
+
+        protected void WireEventListeners (IEnumerable<Control> controls) {
+            foreach (var ctl in controls) {
+                var cb = ctl as CheckBox;
+                if (cb != null)
+                    cb.CheckedChanged += ValuesChanged;
+
+                var nud = ctl as NumericUpDown;
+                if (nud != null)
+                    nud.ValueChanged += ValuesChanged;
+
+                var trb = ctl as TrackBar;
+                if (trb != null)
+                    trb.ValueChanged += ValuesChanged;
+
+                var txb = ctl as TextBox;
+                if (txb != null)
+                    txb.TextChanged += ValuesChanged;
+
+                WireEventListeners(ctl.Controls.Cast<Control>());
+            }
         }
 
         public string GetMemberName (IBoundMember member) {

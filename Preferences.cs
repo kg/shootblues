@@ -90,7 +90,7 @@ namespace ShootBlues {
             )) {
                 var fResult = query.ExecuteScalar<T>(Script.Name, prefName);
                 yield return fResult;
-                yield return new Result(fResult);
+                yield return new Result(fResult.Result);
             }
         }
 

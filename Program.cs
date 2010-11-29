@@ -720,7 +720,7 @@ namespace ShootBlues {
                     if (!LoadedScripts.ContainsKey(scriptName))
                         yield return LoadScript(scriptName, loadingWindow);
 
-                yield return ReloadAllScripts(scriptList);
+                yield return new RunAsBackground(ReloadAllScripts(scriptList));
 
                 EventBus.Broadcast(Profile, "ScriptsChanged", scriptList); 
             }
@@ -1049,22 +1049,28 @@ rpcSend(result, id={1}L)", pythonText, messageID
         }
 
         private static IEnumerator<object> ReloadAllScripts (ScriptName[] scriptList) {
-            foreach (var pi in RunningProcesses) {
+            foreach (var pi in RunningProcesses)
                 pi.Ready = false;
 
-                foreach (var scriptName in scriptList.Reverse()) {
-                    if (pi.LoadedScripts.Contains(scriptName)) {
-                        yield return new RunAsBackground(LoadedScripts[scriptName].UnloadFrom(pi));
-                        pi.LoadedScripts.Remove(scriptName);
+            try {
+                foreach (var pi in RunningProcesses) { 
+                    foreach (var scriptName in scriptList.Reverse()) {
+                        if (pi.LoadedScripts.Contains(scriptName)) {
+                            yield return new RunAsBackground(LoadedScripts[scriptName].UnloadFrom(pi));
+                            pi.LoadedScripts.Remove(scriptName);
+                        }
                     }
                 }
+
+                foreach (var scriptName in scriptList)
+                    yield return new RunAsBackground(LoadedScripts[scriptName].Reload());
+
+                foreach (var pi in RunningProcesses)
+                    yield return LoadScriptsInto(pi, scriptList);
+            } finally {
+                foreach (var pi in RunningProcesses)
+                    pi.Ready = true;
             }
-
-            foreach (var scriptName in scriptList)
-                yield return new RunAsBackground(LoadedScripts[scriptName].Reload());
-
-            foreach (var pi in RunningProcesses)
-                yield return LoadScriptsInto(pi, scriptList);
         }
 
         public static IEnumerator<object> LoadScriptsInto (ProcessInfo pi, ScriptName[] scriptList) {
@@ -1073,10 +1079,12 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 pi.LoadedScripts.Add(script);
             }
 
+            Console.WriteLine("Loading scripts...");
             var fResult = pi.Channel.Send(new RPCMessage {
                 Type = RPCMessageType.ReloadModules
             }, true);
             yield return fResult;
+            Console.WriteLine("Scripts loaded.");
 
             var resultString = fResult.Result.DecodeAsciiZ();
             if (resultString != "ok")
