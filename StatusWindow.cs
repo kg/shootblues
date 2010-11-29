@@ -19,7 +19,7 @@ namespace ShootBlues {
 
             Text = Text.Replace(
                 "$version", String.Format("v{0}", Application.ProductVersion)
-            ).Replace("$profile", Program.Profile.Name);
+            ).Replace("$profile", Program.Profile.ProfileName);
 
             SplitContainer.SplitterDistance = 130;
             SplitContainer.Panel1MinSize = 100;
@@ -63,6 +63,16 @@ namespace ShootBlues {
             RunningProcessList.EndUpdate();
         }
 
+        private void SetNodeIcon (TreeNode item, string filename) {
+            if ((filename != null) && (!ScriptImageList.Images.ContainsKey(filename))) {
+                Icon icon = Squared.Util.IO.ExtractAssociatedIcon(filename, false);
+                if (icon != null) {
+                    ScriptImageList.Images.Add(filename, icon);
+                }
+            }
+            item.SelectedImageKey = item.ImageKey = filename;
+        }
+
         private TreeNode BuildScriptNode (ScriptName script, bool optional, out bool shouldExpand) {
             var filename = Program.FindScript(script);
 
@@ -79,13 +89,7 @@ namespace ShootBlues {
             item.Text = text;
             item.Tag = filename;
 
-            if ((filename != null) && (!ScriptImageList.Images.ContainsKey(filename))) {
-                Icon icon = Squared.Util.IO.ExtractAssociatedIcon(filename, false);
-                if (icon != null) {
-                    ScriptImageList.Images.Add(filename, icon);
-                }
-            }
-            item.SelectedImageKey = item.ImageKey = filename;
+            SetNodeIcon(item, filename);
 
             shouldExpand = false;
             bool se = false;
@@ -131,6 +135,14 @@ namespace ShootBlues {
                 ScriptImageList.Images.RemoveAt(2);
 
             bool temp = false;
+            {
+                var profileNode = new TreeNode(String.Format("Profile: {0}", Program.Profile.ProfileName));
+                SetNodeIcon(profileNode, Program.ProfilePath);
+                ScriptsList.Nodes.Add(profileNode);
+                foreach (var dep in Program.Profile.Dependencies)
+                    profileNode.Nodes.Add(BuildScriptNode(dep, false, out temp));
+            }
+
             foreach (var script in Program.Scripts) {
                 var item = BuildScriptNode(script.Name, false, out temp);
 

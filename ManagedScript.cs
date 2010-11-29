@@ -23,16 +23,54 @@ namespace ShootBlues {
         }
     }
 
-    public abstract class ManagedScript : IManagedScript {
+    public class DependencyManager {
         protected HashSet<ScriptName> _Dependencies = new HashSet<ScriptName>();
         protected HashSet<ScriptName> _OptionalDependencies = new HashSet<ScriptName>();
-        protected EventSubscription _PreferencesChangedEvt;        
-        private PreferenceStore _Preferences = null;
 
         public ScriptName Name {
             get;
-            private set;
+            protected set;
         }
+
+        public IEnumerable<ScriptName> Dependencies {
+            get { return _Dependencies; }
+        }
+
+        public IEnumerable<ScriptName> OptionalDependencies {
+            get { return _OptionalDependencies; }
+        }
+
+        protected void AddDependency (string name, bool optional) {
+            string searchPath = Name.DefaultSearchPath;
+
+            if (Debugger.IsAttached) {
+                var myAssembly = this.GetType().Assembly;
+                var myAssemblyPath = Path.GetFullPath(Path.GetDirectoryName(myAssembly.Location)).ToLowerInvariant();
+                var mySourcePath = Path.GetFullPath(myAssemblyPath.Replace(
+                    @"\shootblues\bin", String.Format(
+                        @"\shootbluesscripts\{0}", Name.NameWithoutExtension.ToLowerInvariant()
+                        .Replace(".script", "")
+                    )
+                ));
+                if (File.Exists(Path.Combine(mySourcePath, name)))
+                    searchPath = mySourcePath;
+            }
+
+            var sn = new ScriptName(name, searchPath);
+            if (optional)
+                _OptionalDependencies.Add(sn);
+            else
+                _Dependencies.Add(sn);
+        }
+
+        protected void AddDependency (string name) {
+            AddDependency(name, false);
+        }
+    }
+
+    public abstract class ManagedScript : DependencyManager, IManagedScript {
+        protected EventSubscription _PreferencesChangedEvt;        
+        private PreferenceStore _Preferences = null;
 
         protected ConnectionWrapper Database {
             get {
@@ -70,40 +108,6 @@ namespace ShootBlues {
 
         public ManagedScript (ScriptName name) {
             Name = name;
-        }
-
-        public IEnumerable<ScriptName> Dependencies {
-            get { return _Dependencies; }
-        }
-
-        public IEnumerable<ScriptName> OptionalDependencies {
-            get { return _OptionalDependencies; }
-        }
-
-        protected void AddDependency (string name, bool optional) {
-            string searchPath = Name.DefaultSearchPath;
-
-            if (Debugger.IsAttached) {
-                var myAssembly = this.GetType().Assembly;
-                var myAssemblyPath = Path.GetFullPath(Path.GetDirectoryName(myAssembly.Location)).ToLowerInvariant();
-                var mySourcePath = Path.GetFullPath(myAssemblyPath.Replace(
-                    @"\shootblues\bin", String.Format(
-                        @"\shootbluesscripts\{0}", Name.NameWithoutExtension.ToLowerInvariant().Replace(".script", "")
-                    )
-                ));
-                if (File.Exists(Path.Combine(mySourcePath, name)))
-                    searchPath = mySourcePath;
-            }
-
-            var sn = new ScriptName(name, searchPath);
-            if (optional)
-                _OptionalDependencies.Add(sn);
-            else
-                _Dependencies.Add(sn);
-        }
-
-        protected void AddDependency (string name) {
-            AddDependency(name, false);
         }
 
         protected IEnumerator<object> CallFunction (string moduleName, string functionName, params object[] arguments) {

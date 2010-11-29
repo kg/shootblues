@@ -22,12 +22,16 @@ namespace ShootBlues {
 
             var filename = Program.FindScript(Name);
 
-            var fText = Future.RunInThread(
-                () => File.ReadAllText(filename.FullPath)
-            );
-            yield return fText;
+            if (File.Exists(filename.FullPath)) {
+                var fText = Future.RunInThread(
+                    () => File.ReadAllText(filename.FullPath)
+                );
+                yield return fText;
 
-            ScriptText = fText.Result;
+                ScriptText = fText.Result;
+            } else {
+                throw new FileNotFoundException("Python script not found", filename.Name);
+            }
         }
 
         public override IEnumerator<object> LoadInto (ProcessInfo process) {

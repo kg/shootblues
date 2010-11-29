@@ -252,6 +252,7 @@ namespace ShootBlues {
         public static readonly EventBus EventBus = new EventBus();
         public static NotifyIcon TrayIcon;
         public static IProfile Profile;
+        public static string ProfilePath;
         public static TaskScheduler Scheduler;
         public static ConnectionWrapper Database;
 
@@ -385,8 +386,8 @@ namespace ShootBlues {
                     string[] filenames = null;
 
                     yield return Database.ExecutePrimitiveArray<string>(
-                        "SELECT filename FROM scripts WHERE profileName = ?", 
-                        Profile.Name
+                        "SELECT filename FROM scripts WHERE profileName = ?",
+                        Profile.ProfileName
                     ).Bind(() => filenames);
 
                     foreach (var filename in filenames)
@@ -397,7 +398,7 @@ namespace ShootBlues {
                     EventBus.Subscribe(Profile, "OnScriptsAdded", Scheduler, OnScriptsChanging);
                     EventBus.Subscribe(Profile, "OnScriptRemoved", Scheduler, OnScriptsChanging);
 
-                    TrayIcon.Text = TrayIcon.Text + " - " + Profile.Name;
+                    TrayIcon.Text = TrayIcon.Text + " - " + Profile.ProfileName;
                     TrayIcon.Visible = true;
 
                     yield return OnScriptsChanging(null);
@@ -497,15 +498,14 @@ namespace ShootBlues {
         private static IEnumerator<object> LoadProfile (LoadingWindow loadingWindow) {
             IProfile instance = null;
 
-            string profilePath = null;
             {
                 var args = Environment.GetCommandLineArgs();
                 if (args.Length > 1)
-                    profilePath = args[1];
+                    ProfilePath = args[1];
             }
             bool validProfile = false;
             try {
-                validProfile = (profilePath != null) && File.Exists(profilePath);
+                validProfile = (ProfilePath != null) && File.Exists(ProfilePath);
             } catch {
             }
 
@@ -521,11 +521,11 @@ namespace ShootBlues {
                         yield break;
                     }
 
-                    profilePath = dialog.FileName;
+                    ProfilePath = dialog.FileName;
                 }
 
                 var fAssembly = Future.RunInThread(() =>
-                    Assembly.LoadFile(profilePath)
+                    Assembly.LoadFile(ProfilePath)
                 );
                 yield return fAssembly;
 
@@ -546,7 +546,7 @@ namespace ShootBlues {
                 if (instance == null) {
                     validProfile = false;
                     Program.ShowErrorMessage(
-                        String.Format("The file '{0}' is not a valid profile.", profilePath)
+                        String.Format("The file '{0}' is not a valid profile.", ProfilePath)
                     );
                 }
             }
@@ -606,8 +606,17 @@ namespace ShootBlues {
             IManagedScript instance = null;
             var visited = new HashSet<ScriptName>();
             var result = new List<ScriptName>();
+
             var allScripts = new HashSet<ScriptName>(from fn in Scripts select fn.Name);
-            var toVisit = new LinkedList<ScriptName>(allScripts);
+            foreach (var name in Profile.Dependencies)
+                allScripts.Add(name);
+
+            var toVisit = new LinkedList<ScriptName>();
+            foreach (var name in Profile.Dependencies)
+                toVisit.AddLast(name);
+            foreach (var name in allScripts)
+                toVisit.AddLast(name);
+
             var majorScripts = new HashSet<ScriptName>(allScripts);
 
             int initialCount = majorScripts.Count;
@@ -684,11 +693,11 @@ namespace ShootBlues {
             using (var xact = Database.CreateTransaction(true)) {
                 yield return xact;
 
-                yield return Database.ExecuteSQL("DELETE FROM scripts WHERE profileName = ?", Profile.Name);
+                yield return Database.ExecuteSQL("DELETE FROM scripts WHERE profileName = ?", Profile.ProfileName);
 
                 using (var q = Database.BuildQuery("INSERT INTO scripts (profileName, filename) VALUES (?, ?)"))
                 foreach (var filename in Scripts)
-                    yield return q.ExecuteNonQuery(Profile.Name, filename.FullPath);
+                    yield return q.ExecuteNonQuery(Profile.ProfileName, filename.FullPath);
 
                 yield return xact.Commit();
             }
@@ -895,12 +904,15 @@ namespace ShootBlues {
                 if (scriptPath != null)
                     Program.ShowErrorMessage(String.Format("The file '{0}' is not a Shoot Blues script.", scriptPath));
             } else {
-                yield return instance.Initialize();
+                var fInitialize = Scheduler.Start(instance.Initialize(), TaskExecutionPolicy.RunAsBackgroundTask);
+                yield return fInitialize;
 
-                LoadedScripts[script] = instance;
+                if (!fInitialize.Failed) {
+                    LoadedScripts[script] = instance;
 
-                if (StatusWindowInstance != null)
-                    yield return instance.OnStatusWindowShown(StatusWindowInstance);
+                    if (StatusWindowInstance != null)
+                        yield return instance.OnStatusWindowShown(StatusWindowInstance);
+                }
             }
 
             LoadingScripts.Remove(script);

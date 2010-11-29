@@ -7,7 +7,7 @@ namespace ShootBlues.Profile {
             : base("python.exe") {
         }
 
-        public override string Name {
+        public override string ProfileName {
             get {
                 return "Python";
             }

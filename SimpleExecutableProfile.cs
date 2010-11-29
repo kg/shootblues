@@ -6,17 +6,19 @@ using Squared.Task;
 using System.Diagnostics;
 
 namespace ShootBlues {
-    public class SimpleExecutableProfile : IProfile {
+    public class SimpleExecutableProfile : DependencyManager, IProfile {
         public readonly string ExecutableName;
         protected ProcessWatcher Watcher;
 
         public SimpleExecutableProfile (string executableName) {
             ExecutableName = executableName;
 
+            Name = new Filename(this.GetType().Assembly.Location).Name;
+
             Watcher = new ProcessWatcher(executableName);
         }
 
-        public virtual string Name {
+        public virtual string ProfileName {
             get {
                 return ExecutableName;
             }

@@ -39,7 +39,10 @@ namespace ShootBlues {
     }
 
     public interface IProfile : IDisposable {
-        string Name {
+        string ProfileName {
+            get;
+        }
+        IEnumerable<ScriptName> Dependencies {
             get;
         }
 
