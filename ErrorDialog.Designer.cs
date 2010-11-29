@@ -113,7 +113,6 @@
             this.Controls.Add(this.NextError);
             this.Controls.Add(this.ErrorText);
             this.Font = new System.Drawing.Font("MS Reference Sans Serif", 9.75F);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(4);
             this.MaximizeBox = false;

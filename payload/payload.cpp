@@ -75,7 +75,7 @@ PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
   return NULL;
 }
 
-void errorHandler (int messageId) {
+bool errorHandler (int messageId) {
   PyObject * errType = 0, * errValue = 0, * traceback = 0;
   PyErr_Fetch(&errType, &errValue, &traceback);
   if (!errType)
@@ -111,19 +111,23 @@ void errorHandler (int messageId) {
   Py_XDECREF(traceback);
 
   PyErr_Clear();
+  return true;
 }
 
 void callFunction (const char * moduleName, const char * functionName, const char * argumentsJson, unsigned int messageId) {
   PyObject * fullname = PyString_FromFormat("shootblues.%s", moduleName);
   PyObject * module = PyImport_Import(fullname);
   Py_DECREF(fullname);
-  if (!module)
-    return errorHandler(messageId);
+  if (!module) {
+    errorHandler(messageId);
+    return;
+  }
 
   PyObject * function = PyObject_GetAttrString(module, functionName);
   if (!function) {
     Py_DECREF(module);
-    return errorHandler(messageId);
+    errorHandler(messageId);
+    return;
   }
 
   PyObject * args;
@@ -140,7 +144,8 @@ void callFunction (const char * moduleName, const char * functionName, const cha
     if (!result) {
       Py_XDECREF(module);
       Py_XDECREF(function);
-      return errorHandler(messageId);
+      errorHandler(messageId);
+      return;
     }
     args = PySequence_Tuple(result);
     Py_XDECREF(result);
@@ -250,6 +255,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
   };
 
   PyObject * iter = 0;
+  bool failed = false;
 
   // Call all modules' __unload__ handler if present
   for (PyObject ** currentSequence = sequences; *currentSequence != 0; currentSequence++) {
@@ -271,7 +277,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
           PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
           PyObject * result = PyObject_CallObject(unloadHandler, NULL);
           if (!result)
-            errorHandler(messageId);
+            failed = errorHandler(messageId);
           else
             Py_DECREF(result);
           Py_DECREF(unloadHandler);
@@ -305,7 +311,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
       }
 
       if (PyErr_Occurred())
-        errorHandler(messageId);
+        failed = errorHandler(messageId);
 
       Py_DECREF(fullname);
       Py_DECREF(name);
@@ -328,7 +334,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
     if (module)
       Py_DECREF(module);
     else
-      errorHandler(messageId);
+      failed = errorHandler(messageId);
 
     Py_DECREF(fullname);
     Py_DECREF(name);
@@ -337,7 +343,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
 
   Py_DECREF(moduleNames);
 
-  if (messageId) {
+  if (messageId && !failed) {
       PyObject * ok = PyString_FromString("ok");
       PyObject * args = PyTuple_Pack(1, ok);
       PyObject * kwargs = Py_BuildValue("{s,I}", "id", messageId);

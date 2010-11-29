@@ -7,6 +7,8 @@ using System.Web.Script.Serialization;
 using Squared.Task.Data.Mapper;
 using Squared.Util.Event;
 using Squared.Task.Data;
+using System.Diagnostics;
+using System.IO;
 
 namespace ShootBlues {
     [Mapper]
@@ -79,7 +81,21 @@ namespace ShootBlues {
         }
 
         protected void AddDependency (string name, bool optional) {
-            var sn = new ScriptName(name, Name.DefaultSearchPath);
+            string searchPath = Name.DefaultSearchPath;
+
+            if (Debugger.IsAttached) {
+                var myAssembly = this.GetType().Assembly;
+                var myAssemblyPath = Path.GetFullPath(Path.GetDirectoryName(myAssembly.Location)).ToLowerInvariant();
+                var mySourcePath = Path.GetFullPath(myAssemblyPath.Replace(
+                    @"\shootblues\bin", String.Format(
+                        @"\shootbluesscripts\{0}", Name.NameWithoutExtension.ToLowerInvariant().Replace(".script", "")
+                    )
+                ));
+                if (File.Exists(Path.Combine(mySourcePath, name)))
+                    searchPath = mySourcePath;
+            }
+
+            var sn = new ScriptName(name, searchPath);
             if (optional)
                 _OptionalDependencies.Add(sn);
             else
