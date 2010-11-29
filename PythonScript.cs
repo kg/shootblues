@@ -13,13 +13,7 @@ namespace ShootBlues {
             : base(name) {
         }
 
-        protected IEnumerator<object> BaseInitialize () {
-            return base.Initialize();
-        }
-
         public override IEnumerator<object> Initialize () {
-            yield return BaseInitialize();
-
             yield return Reload();
         }
 

@@ -365,8 +365,6 @@ namespace ShootBlues {
 
                 numRelocations += 1;
             }
-
-            Console.WriteLine("Processed {0} relocation(s) to rebase to {0:x8}.", numRelocations, newBaseAddress);
         }
 
         public void ResolveImports () {
@@ -392,8 +390,6 @@ namespace ShootBlues {
                     Win32.FreeLibrary(hModule);
                 }
             }
-
-            Console.WriteLine("Processed {0} import(s).", numImports);
         }
 
         public Section SectionFromVirtualAddressRange (UInt32 addressBegin, UInt32 addressEnd) {

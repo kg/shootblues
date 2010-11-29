@@ -171,6 +171,7 @@ namespace ShootBlues {
         public Process Process = null;
         public RPCChannel Channel = null;
         public string Status = "Unknown";
+        public bool Ready = false;
 
         internal HashSet<ScriptName> LoadedScripts = new HashSet<ScriptName>();
         private Dictionary<string, RPCResponseChannel> NamedChannels = new Dictionary<string, RPCResponseChannel>();
@@ -308,6 +309,19 @@ namespace ShootBlues {
                 ShowErrorMessage(error.ToString());
 
             return true;
+        }
+
+        public static IEnumerable<ProcessInfo> GetProcessesRunningScript (IManagedScript script) {
+            foreach (var process in RunningProcesses) {
+                if (!process.LoadedScripts.Contains(script.Name))
+                    continue;
+
+                foreach (var dep in script.Dependencies)
+                    if (!process.LoadedScripts.Contains(dep))
+                        continue;
+
+                yield return process;
+            }
         }
 
         public static void ShowErrorMessage (string text) {
@@ -663,10 +677,6 @@ namespace ShootBlues {
                 }
             }
 
-            Console.WriteLine(
-                "Dependency list: {0}",
-                String.Join(", ", (from sn in result select sn.Name).ToArray())
-            );
             yield return new Result(result.ToArray());
         }
 
@@ -674,7 +684,7 @@ namespace ShootBlues {
             using (var xact = Database.CreateTransaction(true)) {
                 yield return xact;
 
-                Database.ExecuteSQL("DELETE FROM scripts WHERE profileName = ?", Profile.Name);
+                yield return Database.ExecuteSQL("DELETE FROM scripts WHERE profileName = ?", Profile.Name);
 
                 using (var q = Database.BuildQuery("INSERT INTO scripts (profileName, filename) VALUES (?, ?)"))
                 foreach (var filename in Scripts)
@@ -685,7 +695,7 @@ namespace ShootBlues {
         }
 
         private static IEnumerator<object> OnScriptsChanging (Squared.Util.Event.EventInfo evt) {
-            yield return new Start(SaveScriptsToDatabase(), TaskExecutionPolicy.RunAsBackgroundTask);
+            yield return new RunAsBackground(SaveScriptsToDatabase());
 
             using (var loadingWindow = new LoadingWindow()) {
                 loadingWindow.SetStatus("Loading scripts", null);
@@ -697,6 +707,9 @@ namespace ShootBlues {
                 yield return buildScriptList;
 
                 var scriptList = buildScriptList.Result;
+
+                foreach (var process in RunningProcesses)
+                    process.Ready = false;
 
                 var loadedScriptNames = LoadedScripts.Keys.ToArray();
                 foreach (var scriptName in loadedScriptNames)
@@ -974,6 +987,16 @@ rpcSend(result, id={1}L)", pythonText, messageID
             var f = new Future<T>();
             var serializer = new JavaScriptSerializer();
 
+            if (!process.Ready) {
+                f.Fail(new Exception("Process not ready"));
+                return f;
+            }
+
+            if (!process.LoadedScripts.Contains(new ScriptName(moduleName + ".py"))) {
+                f.Fail(new Exception(String.Format("Script not loaded yet: {0}", moduleName)));
+                return f;
+            }
+
             if ((arguments != null) && (arguments.Length == 0))
                 arguments = null;
 
@@ -1027,6 +1050,8 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
         private static IEnumerator<object> ReloadAllScripts (ScriptName[] scriptList) {
             foreach (var pi in RunningProcesses) {
+                pi.Ready = false;
+
                 foreach (var scriptName in scriptList.Reverse()) {
                     if (pi.LoadedScripts.Contains(scriptName)) {
                         yield return new RunAsBackground(LoadedScripts[scriptName].UnloadFrom(pi));
@@ -1048,10 +1073,16 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 pi.LoadedScripts.Add(script);
             }
 
-            yield return Future.RunInThread(() =>
-                pi.Channel.Send(new RPCMessage {
-                    Type = RPCMessageType.ReloadModules
-                }));
+            var fResult = pi.Channel.Send(new RPCMessage {
+                Type = RPCMessageType.ReloadModules
+            }, true);
+            yield return fResult;
+
+            var resultString = fResult.Result.DecodeAsciiZ();
+            if (resultString != "ok")
+                throw new Exception("Script load failed: " + resultString);
+
+            pi.Ready = true;
 
             foreach (var script in scriptList)
                 yield return new RunAsBackground(LoadedScripts[script].LoadedInto(pi));

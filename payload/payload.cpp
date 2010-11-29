@@ -114,7 +114,9 @@ void errorHandler (int messageId) {
 }
 
 void callFunction (const char * moduleName, const char * functionName, const char * argumentsJson, unsigned int messageId) {
-  PyObject * module = PyObject_GetAttrString(g_module, moduleName);
+  PyObject * fullname = PyString_FromFormat("shootblues.%s", moduleName);
+  PyObject * module = PyImport_Import(fullname);
+  Py_DECREF(fullname);
   if (!module)
     return errorHandler(messageId);
 
@@ -239,7 +241,7 @@ PyObject * removeModule (PyObject * self, PyObject * args) {
     return Py_BuildValue("");
 }
 
-PyObject * reloadModules (PyObject * self, PyObject * args) {
+PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId) {
   PyObject * moduleNames = PyMapping_Keys(g_moduleDict);
   PyObject * sysModules = PyObject_GetAttrString(g_sysModule, "modules");
 
@@ -248,7 +250,42 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
   };
 
   PyObject * iter = 0;
-  // Unload all modules
+
+  // Call all modules' __unload__ handler if present
+  for (PyObject ** currentSequence = sequences; *currentSequence != 0; currentSequence++) {
+    iter = PyObject_GetIter(*currentSequence);
+
+    while (PyObject * name = PyIter_Next(iter)) {
+      PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
+
+      PyObject * existingModule = 0;
+
+      if (PyMapping_HasKey(sysModules, fullname))
+        existingModule = PyObject_GetItem(sysModules, fullname);
+      if (!existingModule && PyObject_HasAttr(g_module, name))
+          existingModule = PyObject_GetAttr(g_module, name);
+
+      // If the module was previously loaded, try and call its __unload__ handler
+      if (existingModule) {
+        if (PyObject_HasAttrString(existingModule, "__unload__")) {
+          PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
+          PyObject * result = PyObject_CallObject(unloadHandler, NULL);
+          if (!result)
+            errorHandler(messageId);
+          else
+            Py_DECREF(result);
+          Py_DECREF(unloadHandler);
+        }
+        Py_DECREF(existingModule);
+      }
+
+      Py_DECREF(fullname);
+      Py_DECREF(name);
+    }
+    Py_DECREF(iter);
+  }
+
+  // Remove modules now that we've called the unload handler
   for (PyObject ** currentSequence = sequences; *currentSequence != 0; currentSequence++) {
     iter = PyObject_GetIter(*currentSequence);
 
@@ -267,19 +304,8 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
         PyObject_DelAttr(g_module, name);
       }
 
-      // If the module was previously loaded, try and call its __unload__ handler
-      if (existingModule) {
-        if (PyObject_HasAttrString(existingModule, "__unload__")) {
-          PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
-          PyObject * result = PyObject_CallObject(unloadHandler, NULL);
-          if (!result)
-            errorHandler(0);
-          else
-            Py_DECREF(result);
-          Py_DECREF(unloadHandler);
-        }
-        Py_DECREF(existingModule);
-      }
+      if (PyErr_Occurred())
+        errorHandler(messageId);
 
       Py_DECREF(fullname);
       Py_DECREF(name);
@@ -302,15 +328,31 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
     if (module)
       Py_DECREF(module);
     else
-      errorHandler(0);
+      errorHandler(messageId);
 
     Py_DECREF(fullname);
     Py_DECREF(name);
   }
+  Py_DECREF(iter);
 
   Py_DECREF(moduleNames);
+
+  if (messageId) {
+      PyObject * ok = PyString_FromString("ok");
+      PyObject * args = PyTuple_Pack(1, ok);
+      PyObject * kwargs = Py_BuildValue("{s,I}", "id", messageId);
+      PyObject * result = rpcSend(0, args, kwargs);
+      Py_XDECREF(ok);
+      Py_XDECREF(result);
+      Py_XDECREF(args);
+      Py_XDECREF(kwargs);
+  }
   
   return Py_BuildValue("");
+}
+
+PyObject * reloadModules (PyObject * self, PyObject * args) {
+  return reloadModulesWithId(self, args, 0);
 }
 
 PyObject * findModule (PyObject * self, PyObject * args, PyObject * kwargs) {
@@ -488,9 +530,11 @@ DWORD __stdcall payload (HWND rpcWindow) {
       case RMT_RemoveModule:
         removeModuleString(rpc->moduleName);
         break;
-      case RMT_ReloadModules:
-        reloadModules(0, 0);
+      case RMT_ReloadModules: {
+        PyObject * result = reloadModulesWithId(0, 0, rpc->messageId);
+        Py_XDECREF(result);
         break;
+      } 
       case RMT_CallFunction:
         callFunction(rpc->moduleName, rpc->functionName, rpc->text, rpc->messageId);
         break;

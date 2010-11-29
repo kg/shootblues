@@ -53,7 +53,9 @@
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
     </Reference>
     <Reference Include="System.Data" />
-    <Reference Include="System.Data.SQLite, Version=1.0.66.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=x86" />
+    <Reference Include="System.Data.SQLite, Version=1.0.66.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=x86">
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System.Management" />
     <Reference Include="System.Deployment" />
     <Reference Include="System.Drawing" />
@@ -84,7 +86,11 @@
       <DependentUpon>LoadingWindow.cs</DependentUpon>
     </Compile>
     <Compile Include="ManagedScript.cs" />
+    <Compile Include="Preferences.cs" />
     <Compile Include="PythonScript.cs" />
+    <Compile Include="SimpleConfigPanel.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="SimpleExecutableProfile.cs" />
     <Compile Include="StatusWindow.cs">
       <SubType>Form</SubType>
