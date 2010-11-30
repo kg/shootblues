@@ -314,6 +314,9 @@ namespace ShootBlues {
 
         public static IEnumerable<ProcessInfo> GetProcessesRunningScript (IManagedScript script) {
             foreach (var process in RunningProcesses) {
+                if (!process.Ready)
+                    continue;
+
                 if (!process.LoadedScripts.Contains(script.Name))
                     continue;
 
