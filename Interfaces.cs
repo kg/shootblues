@@ -46,6 +46,7 @@ namespace ShootBlues {
             get;
         }
 
+        IEnumerator<object> WaitUntilProcessReady (ProcessInfo process);
         IEnumerator<object> Run ();
     }
 }

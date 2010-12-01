@@ -174,6 +174,7 @@ namespace ShootBlues {
         public bool Ready = false;
 
         internal HashSet<ScriptName> LoadedScripts = new HashSet<ScriptName>();
+        internal HashSet<string> LoadedPythonModules = new HashSet<string>();
         private Dictionary<string, RPCResponseChannel> NamedChannels = new Dictionary<string, RPCResponseChannel>();
         private HashSet<IFuture> OwnedFutures = new HashSet<IFuture>();
 
@@ -761,9 +762,6 @@ namespace ShootBlues {
                 var payloadResult = new Future<Int32>();
                 var threadId = new Future<UInt32>();
 
-                RunningProcesses.Add(pi);
-                EventBus.Broadcast(Profile, "RunningProcessAdded", pi);
-
                 var fCodeRegion = Future.RunInThread(() =>
                     ProcessInjector.Inject(process, payload.Result, pi.Channel.Handle, payloadResult, threadId)
                 );
@@ -777,9 +775,15 @@ namespace ShootBlues {
                     yield return Future.WaitForFirst(
                         pi.Channel.Receive(), processExit
                     );
+                    pi.Ready = true;
 
+                    var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
+
+                    yield return Profile.WaitUntilProcessReady(pi);
+
+                    RunningProcesses.Add(pi);
                     pi.Status = "Loading scripts into process";
-                    EventBus.Broadcast(Profile, "RunningProcessChanged", pi);
+                    EventBus.Broadcast(Profile, "RunningProcessAdded", pi);
 
                     var buildScriptList = new RunToCompletion<ScriptName[]>(
                         BuildOrderedScriptList(null), TaskExecutionPolicy.RunWhileFutureLives
@@ -794,12 +798,9 @@ namespace ShootBlues {
                             ), processExit
                         );
 
-
                     if (!process.HasExited) {
                         pi.Status = "Scripts loaded";
                         EventBus.Broadcast(Profile, "RunningProcessChanged", pi);
-
-                        var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
 
                         using (fRpcTask)
                             yield return Future.WaitForFirst(
@@ -810,6 +811,8 @@ namespace ShootBlues {
                             pi.Status = String.Format("Payload terminated with exit code {0}.", payloadResult.Result);
                             EventBus.Broadcast(Profile, "RunningProcessChanged", pi);
                         }
+                    } else {
+                        fRpcTask.Dispose();
                     }
                 }
 
@@ -959,6 +962,14 @@ namespace ShootBlues {
             }, true);
         }
 
+        public static IEnumerator<object> EvalPython<T> (ProcessInfo process, string pythonText) {
+            var fResult = EvalPython(process, pythonText);
+            yield return fResult;
+            var ser = new JavaScriptSerializer();
+            var resultJson = fResult.Result.DecodeUTF8Z();
+            yield return new Result(ser.Deserialize<T>(resultJson));
+        }
+
         public static Future<byte[]> EvalPython (ProcessInfo process, string pythonText) {
             var messageID = process.Channel.GetMessageID();
             var fResult = process.Channel.WaitForMessage(messageID);
@@ -972,7 +983,7 @@ namespace ShootBlues {
                 @"def __eval__():
 {0}
 result = __eval__()
-if result:
+if result is not None:
   import json
   result = json.dumps(result)
 from shootblues import rpcSend
@@ -1000,8 +1011,8 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 return f;
             }
 
-            if (!process.LoadedScripts.Contains(new ScriptName(moduleName + ".py"))) {
-                f.Fail(new Exception(String.Format("Script not loaded yet: {0}", moduleName)));
+            if (!process.LoadedPythonModules.Contains(moduleName)) {
+                f.Fail(new Exception(String.Format("Python module not loaded: {0}", moduleName)));
                 return f;
             }
 
@@ -1068,6 +1079,8 @@ rpcSend(result, id={1}L)", pythonText, messageID
                             pi.LoadedScripts.Remove(scriptName);
                         }
                     }
+
+                    pi.LoadedPythonModules.Clear();
                 }
 
                 foreach (var scriptName in scriptList)
@@ -1087,7 +1100,6 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 pi.LoadedScripts.Add(script);
             }
 
-            Console.WriteLine("Loading python modules...");
             var fResult = pi.Channel.Send(new RPCMessage {
                 Type = RPCMessageType.ReloadModules
             }, true);
@@ -1095,8 +1107,14 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
             var ser = new JavaScriptSerializer();
             var resultJson = fResult.Result.DecodeUTF8Z();
-            var loadedScripts = ser.Deserialize<string[]>(resultJson);
-            Console.WriteLine("Python modules loaded: {0}", String.Join(", ", loadedScripts));
+            var loadedModules = ser.Deserialize<string[]>(resultJson);
+            foreach (var module in loadedModules)
+                pi.LoadedPythonModules.Add(module);
+
+            foreach (var s in LoadedScripts.Values) {
+                if ((s is PythonScript) && (!pi.LoadedPythonModules.Contains(s.Name.NameWithoutExtension)))
+                    Console.WriteLine("Module failed to load: {0}", s.Name.NameWithoutExtension);
+            }
 
             pi.Ready = true;
 

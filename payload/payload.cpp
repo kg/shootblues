@@ -219,9 +219,13 @@ int addModuleString (const char * moduleName, const char * script, int messageId
   Py_DECREF(scriptString);
 
   if (messageId) {
-    PyObject * rcode = Py_BuildValue("s", result);
-    pyRpcSend(rcode, messageId);
-    Py_DECREF(rcode);
+    if (result != 0) {
+      errorHandler(messageId);
+    } else {
+      PyObject * rcode = PyString_FromFormat("%i", result);
+      pyRpcSend(rcode, messageId);
+      Py_DECREF(rcode);
+    }
   }
 
   return result;
@@ -232,7 +236,7 @@ PyObject * addModule (PyObject * self, PyObject * args) {
   if (!PyArg_ParseTuple(args, "ss", &moduleName, &script))
     return NULL;
 
-  if (addModuleString(moduleName, script, 0)) {
+  if (addModuleString(moduleName, script, 0) != 0) {
     PyErr_SetString(g_excException, "addModule failed to add module");
     return NULL;
   } else
@@ -247,9 +251,13 @@ int removeModuleString (const char * moduleName, int messageId) {
   int result = PyDict_DelItemString(g_moduleDict, moduleName);
 
   if (messageId) {
-    PyObject * rcode = Py_BuildValue("s", result);
-    pyRpcSend(rcode, messageId);
-    Py_DECREF(rcode);
+    if (result != 0) {
+      errorHandler(messageId);
+    } else {
+      PyObject * rcode = PyString_FromFormat("%i", result);
+      pyRpcSend(rcode, messageId);
+      Py_DECREF(rcode);
+    }
   }
 
   return result;
@@ -260,7 +268,7 @@ PyObject * removeModule (PyObject * self, PyObject * args) {
   if (!PyArg_ParseTuple(args, "s", &moduleName))
     return NULL;
 
-  if (removeModuleString(moduleName, 0)) {
+  if (removeModuleString(moduleName, 0) != 0) {
     PyErr_SetString(g_excException, "removeModule failed to remove module");
     return NULL;
   } else
@@ -355,7 +363,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
     PyObject * module = PyImport_Import(fullname);
 
     if (module) {
-      PyList_Append(loadedModules, fullname);
+      PyList_Append(loadedModules, name);
       Py_DECREF(module);
     } else
       failed = errorHandler(0);

@@ -35,6 +35,10 @@ namespace ShootBlues {
             }
         }
 
+        public virtual IEnumerator<object> WaitUntilProcessReady (ProcessInfo process) {
+            yield break;
+        }
+
         protected virtual IEnumerator<object> OnNewProcess (Process process) {
             yield return Program.NotifyNewProcess(process);
         }
