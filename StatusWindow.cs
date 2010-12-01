@@ -189,7 +189,7 @@ namespace ShootBlues {
         private void LoadScriptButton_Click (object sender, EventArgs e) {
             using (var dialog = new OpenFileDialog()) {
                 dialog.Title = "Load Script(s)";
-                dialog.Filter = "All Scripts|*.script.dll;*.py|Managed Scripts|*.script.dll|Python Scripts|*.py";
+                dialog.Filter = "All Scripts|*.script.dll;*.script.py|Managed Scripts|*.script.dll|Python Scripts|*.script.py";
                 dialog.CheckFileExists = true;
                 dialog.Multiselect = true;
 

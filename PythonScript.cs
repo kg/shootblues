@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Squared.Task;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace ShootBlues {
     public class PythonScript : ManagedScript {
@@ -34,18 +35,27 @@ namespace ShootBlues {
             }
         }
 
+        public string ModuleName {
+            get {
+                return Regex.Replace(
+                    Name, @"(\.script\.py|\.py)", 
+                    "", RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace
+                );
+            }
+        }
+
         public override IEnumerator<object> LoadInto (ProcessInfo process) {
             if (ScriptText == null)
                 yield return Reload();
 
             yield return Program.LoadPythonScript(
-                process, Name.NameWithoutExtension, ScriptText
+                process, ModuleName, ScriptText
             );
         }
 
         public override IEnumerator<object> UnloadFrom (ProcessInfo process) {
             yield return Program.UnloadPythonScript(
-                process, Name.NameWithoutExtension
+                process, ModuleName
             );
         }
     }

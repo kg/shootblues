@@ -395,11 +395,12 @@ PyObject * reloadModules (PyObject * self, PyObject * args) {
 PyObject * findModule (PyObject * self, PyObject * args, PyObject * kwargs) {
   static char * kwlist[] = {"fullname", "path", NULL};
   char * moduleName = 0;
+  int moduleNameLen = 0;
   PyObject * path = 0;
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s|O", kwlist, &moduleName, &path))
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s#|O", kwlist, &moduleName, &moduleNameLen, &path))
     return NULL;
 
-  if (strstr(moduleName, "shootblues.") != moduleName)
+  if ((moduleNameLen < 11) || memcmp(moduleName, "shootblues.", 11) != 0)
     return Py_BuildValue("");
 
   if (PyMapping_HasKeyString(g_moduleDict, moduleName + 11)) {
@@ -412,10 +413,11 @@ PyObject * findModule (PyObject * self, PyObject * args, PyObject * kwargs) {
 PyObject * loadModule (PyObject * self, PyObject * args) {
   // Inexplicably HasKeyString takes char* and not const char*
   char *moduleName;
-  if (!PyArg_ParseTuple(args, "s", &moduleName))
+  int moduleNameLen;
+  if (!PyArg_ParseTuple(args, "s#", &moduleName, &moduleNameLen))
     return NULL;
 
-  if (strstr(moduleName, "shootblues.") != moduleName) {
+  if ((moduleNameLen < 11) || memcmp(moduleName, "shootblues.", 11) != 0) {
     PyErr_SetString(g_excImportError, "load_module can only load child modules of shootblues");
     return NULL;
   }
