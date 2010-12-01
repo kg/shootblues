@@ -422,10 +422,9 @@ namespace ShootBlues {
                 foreach (var scriptName in process.LoadedScripts)
                     yield return LoadedScripts[scriptName].UnloadFrom(process);
 
-                yield return Future.RunInThread(() =>
-                    process.Channel.Send(new RPCMessage {
-                        Type = RPCMessageType.ReloadModules
-                    }));
+                yield return process.Channel.Send(new RPCMessage {
+                    Type = RPCMessageType.ReloadModules
+                }, true);
                 
                 process.LoadedScripts.Clear();
                 process.Dispose();
@@ -946,22 +945,18 @@ namespace ShootBlues {
         }
 
         public static IEnumerator<object> LoadPythonScript (ProcessInfo pi, string moduleName, string scriptText) {
-            yield return Future.RunInThread(() =>
-                pi.Channel.Send(new RPCMessage {
-                    Type = RPCMessageType.AddModule,
-                    ModuleName = moduleName,
-                    Text = scriptText
-                })
-            );
+            yield return pi.Channel.Send(new RPCMessage {
+                Type = RPCMessageType.AddModule,
+                ModuleName = moduleName,
+                Text = scriptText
+            }, true);
         }
 
         public static IEnumerator<object> UnloadPythonScript (ProcessInfo pi, string moduleName) {
-            yield return Future.RunInThread(() =>
-                pi.Channel.Send(new RPCMessage {
-                    Type = RPCMessageType.RemoveModule,
-                    ModuleName = moduleName
-                })
-            );
+            yield return pi.Channel.Send(new RPCMessage {
+                Type = RPCMessageType.RemoveModule,
+                ModuleName = moduleName
+            }, true);
         }
 
         public static Future<byte[]> EvalPython (ProcessInfo process, string pythonText) {
@@ -984,12 +979,10 @@ from shootblues import rpcSend
 rpcSend(result, id={1}L)", pythonText, messageID
             );
 
-            Future.RunInThread(() =>
-                process.Channel.Send(new RPCMessage {
-                    Type = RPCMessageType.Run,
-                    Text = pythonText
-                })
-            );
+            process.Channel.Send(new RPCMessage {
+                Type = RPCMessageType.Run,
+                Text = pythonText
+            });
 
             return fResult;
         }
@@ -1094,16 +1087,16 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 pi.LoadedScripts.Add(script);
             }
 
-            Console.WriteLine("Loading scripts...");
+            Console.WriteLine("Loading python modules...");
             var fResult = pi.Channel.Send(new RPCMessage {
                 Type = RPCMessageType.ReloadModules
             }, true);
             yield return fResult;
-            Console.WriteLine("Scripts loaded.");
 
-            var resultString = fResult.Result.DecodeAsciiZ();
-            if (resultString != "ok")
-                throw new Exception("Script load failed: " + resultString);
+            var ser = new JavaScriptSerializer();
+            var resultJson = fResult.Result.DecodeUTF8Z();
+            var loadedScripts = ser.Deserialize<string[]>(resultJson);
+            Console.WriteLine("Python modules loaded: {0}", String.Join(", ", loadedScripts));
 
             pi.Ready = true;
 

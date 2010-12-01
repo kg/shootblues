@@ -75,6 +75,15 @@ PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
   return NULL;
 }
 
+void pyRpcSend (PyObject * messageBody, int messageId) {
+  PyObject * args = PyTuple_Pack(1, messageBody);
+  PyObject * kwargs = Py_BuildValue("{s,I}", "id", messageId);
+  PyObject * result = rpcSend(0, args, kwargs);
+  Py_XDECREF(result);
+  Py_XDECREF(args);
+  Py_XDECREF(kwargs);
+}
+
 bool errorHandler (int messageId) {
   PyObject * errType = 0, * errValue = 0, * traceback = 0;
   PyErr_Fetch(&errType, &errValue, &traceback);
@@ -88,6 +97,7 @@ bool errorHandler (int messageId) {
   PyObject * format_exception = PyObject_GetAttrString(g_tracebackModule, "format_exception");
   PyObject * args = PyTuple_Pack(3, errType, errValue, traceback);
   PyObject * exception = PyObject_CallObject(format_exception, args);
+  Py_XDECREF(args);
 
   if (exception) {
     PyObject * separator = PyString_FromString("");
@@ -95,13 +105,13 @@ bool errorHandler (int messageId) {
     Py_XDECREF(separator);
     Py_XDECREF(exception);
     if (exceptionString) {
-      Py_XDECREF(args);
-      args = PyTuple_Pack(1, exceptionString);
-      PyObject * kwargs = Py_BuildValue("{s,I}", "id", messageId);
-      PyObject * result = rpcSend(0, args, kwargs);
-      Py_XDECREF(result);
+      pyRpcSend(exceptionString, messageId);
       Py_XDECREF(exceptionString);
     }
+  } else {
+    PyObject * exceptionString = PyString_FromString("errorHandler called with no error set! WTF.");
+    pyRpcSend(exceptionString, messageId);
+    Py_XDECREF(exceptionString);
   }
 
   Py_XDECREF(args);
@@ -160,11 +170,7 @@ void callFunction (const char * moduleName, const char * functionName, const cha
     PyObject * resultJson = PyObject_CallObject(dumps, args);
     Py_XDECREF(dumps);
     Py_XDECREF(args);
-    Py_DECREF(result);
-    args = PyTuple_Pack(1, resultJson);
-    PyObject * kwargs = Py_BuildValue("{s:I}", "id", messageId);
-    result = rpcSend(0, args, kwargs);
-    Py_DECREF(kwargs);
+    pyRpcSend(resultJson, messageId);
     Py_DECREF(resultJson);
   } else
     errorHandler(messageId);
@@ -207,10 +213,17 @@ PyObject * run (PyObject * self, PyObject * args, PyObject * kwargs) {
   return Py_BuildValue("");
 }
 
-int addModuleString (const char * moduleName, const char * script) {
+int addModuleString (const char * moduleName, const char * script, int messageId) {
   PyObject * scriptString = PyString_FromString(script);
   int result = PyDict_SetItemString(g_moduleDict, moduleName, scriptString);
   Py_DECREF(scriptString);
+
+  if (messageId) {
+    PyObject * rcode = Py_BuildValue("s", result);
+    pyRpcSend(rcode, messageId);
+    Py_DECREF(rcode);
+  }
+
   return result;
 }
 
@@ -219,19 +232,27 @@ PyObject * addModule (PyObject * self, PyObject * args) {
   if (!PyArg_ParseTuple(args, "ss", &moduleName, &script))
     return NULL;
 
-  if (addModuleString(moduleName, script)) {
+  if (addModuleString(moduleName, script, 0)) {
     PyErr_SetString(g_excException, "addModule failed to add module");
     return NULL;
   } else
     return Py_BuildValue("");
 }
 
-int removeModuleString (const char * moduleName) {
+int removeModuleString (const char * moduleName, int messageId) {
   PyObject * nameString = PyString_FromString(moduleName);
   PyList_Append(g_unloadedModules, nameString);
   Py_DECREF(nameString);
 
-  return PyDict_DelItemString(g_moduleDict, moduleName);
+  int result = PyDict_DelItemString(g_moduleDict, moduleName);
+
+  if (messageId) {
+    PyObject * rcode = Py_BuildValue("s", result);
+    pyRpcSend(rcode, messageId);
+    Py_DECREF(rcode);
+  }
+
+  return result;
 }
 
 PyObject * removeModule (PyObject * self, PyObject * args) {
@@ -239,7 +260,7 @@ PyObject * removeModule (PyObject * self, PyObject * args) {
   if (!PyArg_ParseTuple(args, "s", &moduleName))
     return NULL;
 
-  if (removeModuleString(moduleName)) {
+  if (removeModuleString(moduleName, 0)) {
     PyErr_SetString(g_excException, "removeModule failed to remove module");
     return NULL;
   } else
@@ -277,7 +298,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
           PyObject * unloadHandler = PyObject_GetAttrString(existingModule, "__unload__");
           PyObject * result = PyObject_CallObject(unloadHandler, NULL);
           if (!result)
-            failed = errorHandler(messageId);
+            failed = errorHandler(0);
           else
             Py_DECREF(result);
           Py_DECREF(unloadHandler);
@@ -311,7 +332,7 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
       }
 
       if (PyErr_Occurred())
-        failed = errorHandler(messageId);
+        failed = errorHandler(0);
 
       Py_DECREF(fullname);
       Py_DECREF(name);
@@ -325,35 +346,37 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
   Py_DECREF(g_unloadedModules);
   g_unloadedModules = newUnloadedModules;
 
+  PyObject * loadedModules = PyList_New(0);
+
   // Import all modules
   iter = PyObject_GetIter(moduleNames);
   while (PyObject * name = PyIter_Next(iter)) {
     PyObject * fullname = PyString_FromFormat("shootblues.%s", PyString_AsString(name));
     PyObject * module = PyImport_Import(fullname);
 
-    if (module)
+    if (module) {
+      PyList_Append(loadedModules, fullname);
       Py_DECREF(module);
-    else
-      failed = errorHandler(messageId);
+    } else
+      failed = errorHandler(0);
 
     Py_DECREF(fullname);
     Py_DECREF(name);
   }
   Py_DECREF(iter);
-
   Py_DECREF(moduleNames);
 
-  if (messageId && !failed) {
-      PyObject * ok = PyString_FromString("ok");
-      PyObject * args = PyTuple_Pack(1, ok);
-      PyObject * kwargs = Py_BuildValue("{s,I}", "id", messageId);
-      PyObject * result = rpcSend(0, args, kwargs);
-      Py_XDECREF(ok);
-      Py_XDECREF(result);
-      Py_XDECREF(args);
-      Py_XDECREF(kwargs);
+  if (messageId) {
+    PyObject * dumps = PyObject_GetAttrString(g_jsonModule, "dumps");
+    PyObject * args = PyTuple_Pack(1, loadedModules);
+    PyObject * modulesJson = PyObject_CallObject(dumps, args);
+    Py_XDECREF(dumps);
+    Py_DECREF(args);
+    pyRpcSend(modulesJson, messageId);
+    Py_XDECREF(modulesJson);
   }
   
+  Py_DECREF(loadedModules);
   return Py_BuildValue("");
 }
 
@@ -531,10 +554,10 @@ DWORD __stdcall payload (HWND rpcWindow) {
         runString(rpc->text, rpc->messageId);
         break;
       case RMT_AddModule:
-        addModuleString(rpc->moduleName, rpc->text);
+        addModuleString(rpc->moduleName, rpc->text, rpc->messageId);
         break;
       case RMT_RemoveModule:
-        removeModuleString(rpc->moduleName);
+        removeModuleString(rpc->moduleName, rpc->messageId);
         break;
       case RMT_ReloadModules: {
         PyObject * result = reloadModulesWithId(0, 0, rpc->messageId);
