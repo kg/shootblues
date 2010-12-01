@@ -270,6 +270,7 @@ namespace ShootBlues {
                     fMainTask.RegisterOnComplete((_) => {
                         if (_.Failed) {
                             ExitCode = 1;
+                            MessageBox.Show(_.Error.ToString(), "Shoot Blues Fatal Error");
                             Application.Exit();
                         }
                     });
@@ -638,7 +639,7 @@ namespace ShootBlues {
                 visited.Add(current);
                 majorScripts.Remove(current);
 
-                yield return LoadScript(current, loadingWindow);
+                yield return new RunAsBackground(LoadScript(current, loadingWindow));
 
                 if (!LoadedScripts.TryGetValue(current, out instance)) {
                     if (!FailedScripts.Contains(current))
@@ -730,7 +731,7 @@ namespace ShootBlues {
 
                 foreach (var scriptName in scriptList)
                     if (!LoadedScripts.ContainsKey(scriptName))
-                        yield return LoadScript(scriptName, loadingWindow);
+                        yield return new RunAsBackground(LoadScript(scriptName, loadingWindow));
 
                 yield return new RunAsBackground(ReloadAllScripts(scriptList));
 
@@ -872,56 +873,63 @@ namespace ShootBlues {
                 LoadingScripts[script] = loadFuture = new SignalFuture();
             }
 
-            var fScriptPath = new RunToCompletion<Filename>(
-                FindScriptInteractive(script, loadingWindow), TaskExecutionPolicy.RunWhileFutureLives
-            );
-            yield return fScriptPath;
-            var scriptPath = fScriptPath.Result;
-
-            if (scriptPath == null) {
-                instance = null;
-            } else if (script.Extension == ".py") {
-                instance = new PythonScript(scriptPath.Name);
-            } else if (script.Extension == ".dll") {
-                var fAssembly = Future.RunInThread(() =>
-                    Assembly.LoadFile(scriptPath)
+            try {
+                var fScriptPath = new RunToCompletion<Filename>(
+                    FindScriptInteractive(script, loadingWindow), TaskExecutionPolicy.RunWhileFutureLives
                 );
-                yield return fAssembly;
+                yield return fScriptPath;
+                var scriptPath = fScriptPath.Result;
 
-                var fTypes = Future.RunInThread(() => fAssembly.Result.GetTypes());
-                yield return fTypes;
+                if (scriptPath == null) {
+                    instance = null;
+                } else if (script.Extension == ".py") {
+                    instance = new PythonScript(scriptPath.Name);
+                } else if (script.Extension == ".dll") {
+                    if (!File.Exists(scriptPath))
+                        throw new FileNotFoundException("Managed script not found", scriptPath);
 
-                var managedScript = typeof(IManagedScript);
-                foreach (var type in fTypes.Result) {
-                    if (!managedScript.IsAssignableFrom(type))
-                        continue;
+                    var fAssembly = Future.RunInThread(() =>
+                        Assembly.LoadFile(scriptPath)
+                    );
+                    yield return fAssembly;
 
-                    var constructor = type.GetConstructor(new Type[] { typeof(ScriptName) });
-                    instance = constructor.Invoke(new object[] {
-                        scriptPath.Name
-                    }) as IManagedScript;
+                    if (!fAssembly.Failed) {
+                        var fTypes = Future.RunInThread(() => fAssembly.Result.GetTypes());
+                        yield return fTypes;
 
-                    break;
+                        var managedScript = typeof(IManagedScript);
+                        foreach (var type in fTypes.Result) {
+                            if (!managedScript.IsAssignableFrom(type))
+                                continue;
+
+                            var constructor = type.GetConstructor(new Type[] { typeof(ScriptName) });
+                            instance = constructor.Invoke(new object[] {
+                                scriptPath.Name
+                            }) as IManagedScript;
+
+                            break;
+                        }
+                    }
                 }
-            }
 
-            if (instance == null) {
-                if (scriptPath != null)
-                    Program.ShowErrorMessage(String.Format("The file '{0}' is not a Shoot Blues script.", scriptPath));
-            } else {
-                var fInitialize = Scheduler.Start(instance.Initialize(), TaskExecutionPolicy.RunAsBackgroundTask);
-                yield return fInitialize;
+                if (instance == null) {
+                    if (scriptPath != null)
+                        throw new Exception(String.Format("The file '{0}' is not a Shoot Blues script.", scriptPath));
+                } else {
+                    var fInitialize = Scheduler.Start(instance.Initialize(), TaskExecutionPolicy.RunAsBackgroundTask);
+                    yield return fInitialize;
 
-                if (!fInitialize.Failed) {
-                    LoadedScripts[script] = instance;
+                    if (!fInitialize.Failed) {
+                        LoadedScripts[script] = instance;
 
-                    if (StatusWindowInstance != null)
-                        yield return instance.OnStatusWindowShown(StatusWindowInstance);
+                        if (StatusWindowInstance != null)
+                            yield return instance.OnStatusWindowShown(StatusWindowInstance);
+                    }
                 }
+            } finally {
+                LoadingScripts.Remove(script);
+                loadFuture.Complete();
             }
-
-            LoadingScripts.Remove(script);
-            loadFuture.Complete();
         }
 
         public static IEnumerator<object> UnloadScript (ScriptName script) {
