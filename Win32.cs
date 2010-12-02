@@ -106,28 +106,28 @@ namespace ShootBlues {
         );
         [DllImport("kernel32", SetLastError = true, ExactSpelling = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern bool VirtualProtectEx (
+        public static extern int VirtualProtectEx (
             IntPtr hProcess, UInt32 lpAddress,
             uint dwSize, MemoryProtection flNewProtect,
             out MemoryProtection flOldProtect
         );
         [DllImport("kernel32", SetLastError = true, ExactSpelling = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern IntPtr VirtualFreeEx (
+        public static extern int VirtualFreeEx (
             IntPtr hProcess, IntPtr lpAddress,
             uint dwSize, FreeType dwFreeType
         );
         [DllImport("kernel32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern bool WriteProcessMemory (
+        public static extern int WriteProcessMemory (
             IntPtr hProcess, UInt32 lpBaseAddress,
             IntPtr lpSrc, uint nSize,
             out int lpNumberOfBytesWritten
         );
         [DllImport("kernel32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern bool ReadProcessMemory (
-            IntPtr hProcess, IntPtr lpBaseAddress,
+        public static extern int ReadProcessMemory (
+            IntPtr hProcess, UInt32 lpBaseAddress,
             IntPtr lpDest, uint nSize,
             out int lpNumberOfBytesRead
         );
@@ -218,6 +218,18 @@ namespace ShootBlues {
                 return result.Result;
             else
                 return IntPtr.Zero;
+        }
+
+        public static SafeProcessHandle OpenProcessHandle (ProcessAccessFlags desiredAccess, bool inheritHandle, int processId) {
+            var handle = OpenProcess(desiredAccess, inheritHandle, processId);
+            var error = GetLastError();
+
+            if (handle == IntPtr.Zero)
+                throw new Exception(String.Format(
+                    "Failed to open process: Error {0:x8}", error
+                ));
+
+            return new SafeProcessHandle(handle);
         }
     }
 }

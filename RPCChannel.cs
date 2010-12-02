@@ -61,30 +61,14 @@ namespace ShootBlues {
             CreateHandle(cp);
         }
 
-        protected unsafe byte[] ReadRemoteData (IntPtr address, UInt32 size, out UInt32 messageId) {
-            int bytesRead = 0;
-            byte[] result = new byte[size];
-            using (var handle = new SafeProcessHandle(
-                Win32.OpenProcess(ProcessAccessFlags.All, false, _Process.Id)
-            ))
-            fixed (byte* pResult = result)
-            fixed (UInt32* pId = &messageId) {
-                Win32.ReadProcessMemory(
-                    handle.DangerousGetHandle(), address,
-                    new IntPtr(pId), 4,
-                    out bytesRead
+        protected unsafe byte[] ReadRemoteData (RemoteMemoryRegion region, out UInt32 messageId) {
+            using (var handle = region.OpenHandle()) {
+                messageId = BitConverter.ToUInt32(
+                    region.ReadBytes(handle, 0, 4), 0
                 );
-                Win32.ReadProcessMemory(
-                    handle.DangerousGetHandle(), new IntPtr(address.ToInt64() + 4),
-                    new IntPtr(pResult), size - 4,
-                    out bytesRead
-                );
-            }
 
-            if (bytesRead != 0)
-                return result;
-            else
-                return null;
+                return region.ReadBytes(handle, 4, region.Size - 4);
+            }
         }
 
         protected override void WndProc (ref Message m) {
@@ -92,7 +76,8 @@ namespace ShootBlues {
                 byte[] messageData = null;
                 UInt32 messageID = 0;
                 if ((m.WParam != IntPtr.Zero) && (m.LParam != IntPtr.Zero))
-                    messageData = ReadRemoteData(m.WParam, (uint)m.LParam.ToInt64(), out messageID);
+                using (var region = RemoteMemoryRegion.Existing(_Process, m.WParam, (uint)m.LParam.ToInt64()))
+                    messageData = ReadRemoteData(region, out messageID);
 
                 Future<byte[]> fResult;
                 if (_AwaitingResponses.TryGetValue(messageID, out fResult)) {
@@ -181,16 +166,13 @@ namespace ShootBlues {
                 _AwaitingResponses[messageID] = result;
             }
 
-            using (var handle = new SafeProcessHandle(
-                Win32.OpenProcess(ProcessAccessFlags.All, false, _Process.Id)
-            )) {
-                int numBytes;
-                ProcessInjector.RemoteMemoryRegion region;
+            using (var handle = Win32.OpenProcessHandle(ProcessAccessFlags.All, false, _Process.Id)) {
+                RemoteMemoryRegion region;
                 var regionSize = messageSize + moduleNameSize + textSize + functionNameSize;
                 var buffer = new byte[regionSize];
 
                 // leaked on purpose
-                region = ProcessInjector.RemoteMemoryRegion.Allocate(
+                region = RemoteMemoryRegion.Allocate(
                     _Process, handle, regionSize
                 );
 
@@ -205,17 +187,12 @@ namespace ShootBlues {
                 fixed (byte* pBuffer = buffer) {
                     Marshal.StructureToPtr(transportMessage, new IntPtr(pBuffer), false);
 
-                    Win32.WriteProcessMemory(
-                        _Process.Handle, (uint)region.Address.ToInt64(),
-                        new IntPtr(pBuffer), region.Size,
-                        out numBytes
-                    );
-                }
-
-                if (numBytes != regionSize) {
-                    var error = Win32.GetLastError();
-                    region.Dispose();
-                    throw new Exception(String.Format("Remote write failed: error {0:x8}", error));
+                    try {
+                        region.Write(handle, 0, regionSize, pBuffer);
+                    } catch {
+                        region.Dispose();
+                        throw;
+                    }
                 }
 
                 Win32.PostThreadMessage(RemoteThreadId, WM_RPC_MESSAGE, region.Address, region.Size);
