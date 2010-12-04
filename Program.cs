@@ -342,9 +342,6 @@ namespace ShootBlues {
             if (ErrorDialogInstance == null) {
                 ErrorDialogInstance = new ErrorDialog(Scheduler);
                 Scheduler.Start(ErrorDialogTask(), TaskExecutionPolicy.RunAsBackgroundTask);
-            } else {
-                ErrorDialogInstance.Activate();
-                ErrorDialogInstance.Focus();
             }
 
             ErrorDialogInstance.AddError(text, title);
@@ -1120,8 +1117,9 @@ rpcSend(result, id={1}L)", pythonText, messageID
                 pi.LoadedPythonModules.Add(module);
 
             foreach (var s in LoadedScripts.Values) {
-                if ((s is PythonScript) && (!pi.LoadedPythonModules.Contains(s.Name.NameWithoutExtension)))
-                    Console.WriteLine("Module failed to load: {0}", s.Name.NameWithoutExtension);
+                var ps = s as PythonScript;
+                if ((ps != null) && (!pi.LoadedPythonModules.Contains(ps.ModuleName)))
+                    Console.WriteLine("Module failed to load: {0}", ps.ModuleName);
             }
 
             pi.Ready = true;

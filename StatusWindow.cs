@@ -143,7 +143,7 @@ namespace ShootBlues {
                     profileNode.Nodes.Add(BuildScriptNode(dep, false, out temp));
             }
 
-            foreach (var script in Program.Scripts) {
+            foreach (var script in Program.Scripts.OrderBy((fn) => fn.NameWithoutExtension)) {
                 var item = BuildScriptNode(script.Name, false, out temp);
 
                 ScriptsList.Nodes.Add(item);
