@@ -6,6 +6,7 @@ using Squared.Task.Data;
 using Squared.Util.Event;
 using Squared.Task;
 using System.Web.Script.Serialization;
+using System.Data.Common;
 
 namespace ShootBlues {
     public class PreferenceStore : IDisposable {
@@ -53,8 +54,13 @@ namespace ShootBlues {
 
             using (var query = Database.BuildQuery(
                 "replace into prefs (scriptName, prefName, value) values (?, ?, ?)"
-            ))
+            )) {
+                // System.Data.SQLite sucks :|
+                var param = query.Command.Parameters[2] as DbParameter;
+                param.DbType = System.Data.DbType.Object;
+
                 yield return query.ExecuteNonQuery(Script.Name, prefName, value);
+            }
 
             DirtyPrefs.Add(prefName);
             Flush();
@@ -69,10 +75,16 @@ namespace ShootBlues {
 
                 using (var query = Database.BuildQuery(
                     "replace into prefs (scriptName, prefName, value) values (?, ?, ?)"
-                ))
-                foreach (var kvp in toUpdate) {
-                    yield return query.ExecuteNonQuery(Script.Name, kvp.Key, kvp.Value);
-                    DirtyPrefs.Add(kvp.Key);
+                )) {
+                    // System.Data.SQLite sucks :|
+                    var param = query.Command.Parameters[2] as DbParameter;
+                    param.DbType = System.Data.DbType.Object;
+                    
+                    foreach (var kvp in toUpdate) {
+                        yield return query.ExecuteNonQuery(Script.Name, kvp.Key, kvp.Value);
+
+                        DirtyPrefs.Add(kvp.Key);
+                    }
                 }
 
                 yield return xact.Commit();

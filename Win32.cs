@@ -7,6 +7,7 @@ using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using System.Security;
 using Squared.Task;
+using System.Security.Principal;
 
 namespace ShootBlues {
     [Flags]
@@ -45,7 +46,6 @@ namespace ShootBlues {
 
     [Flags]
     public enum ProcessAccessFlags : uint {
-        All = 0x001F0FFF,
         Terminate = 0x00000001,
         CreateThread = 0x00000002,
         VMOperation = 0x00000008,
@@ -55,6 +55,40 @@ namespace ShootBlues {
         SetInformation = 0x00000200,
         QueryInformation = 0x00000400,
         Synchronize = 0x00100000
+    }
+
+    [Flags]
+    public enum ThreadAccessFlags : uint {
+        Terminate = 0x0001,
+        SuspendResume = 0x0002,
+        GetContext = 0x0008,
+        SetContext = 0x0010,
+        SetInformation = 0x0020,
+        QueryInformation = 0x0040,
+        SetThreadToken = 0x0080,
+        Impersonate = 0x0100,
+        DirectImpersonation = 0x0200
+    }
+    
+    [Flags]
+    public enum PrivilegeAttributes : uint {
+        Disabled = 0x0,
+        EnabledByDefault = 0x00000001,
+        Enabled = 0x00000002,
+        Removed = 0x00000004,
+        UsedForAccess = 0x80000000
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack=1)]
+    public struct TokenPrivileges {
+        public UInt32 PrivilegeCount;
+        public UInt64 Luid;
+        public PrivilegeAttributes Attributes;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect {
+        public int Left, Top, Right, Bottom;
     }
 
     // Microsoft and their goddamn sealed/abstract classes...
@@ -153,11 +187,20 @@ namespace ShootBlues {
         [return: MarshalAs(UnmanagedType.Bool)]
         [DllImport("user32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern bool PostMessage (IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+        public static extern bool PostMessage (
+            IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam
+        );
+        [DllImport("user32", SetLastError = true)]
+        [SuppressUnmanagedCodeSecurity]
+        public static extern UInt32 SendMessage (
+            IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam
+        );
         [return: MarshalAs(UnmanagedType.Bool)]
         [DllImport("user32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern bool PostThreadMessage (UInt32 threadId, int Msg, IntPtr wParam, UInt32 lParam);
+        public static extern bool PostThreadMessage (
+            UInt32 threadId, int Msg, IntPtr wParam, UInt32 lParam
+        );
         [DllImport("user32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
         public static extern IntPtr FindWindow (string lpClassName, string lpWindowName);
@@ -170,18 +213,59 @@ namespace ShootBlues {
         public static extern bool EnumWindows (EnumWindowsProc lpEnumFunc, IntPtr lParam);
         [DllImport("user32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern int GetWindowText (IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+        public static extern int GetWindowText (
+            IntPtr hWnd, StringBuilder lpString, int nMaxCount
+        );
         [DllImport("user32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
         public static extern int GetWindowTextLength (IntPtr hWnd);
         [DllImport("user32", SetLastError = true)]
         [SuppressUnmanagedCodeSecurity]
-        public static extern int GetClassName (IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+        public static extern int GetClassName (
+            IntPtr hWnd, StringBuilder lpString, int nMaxCount
+        );
+        [DllImport("advapi32", SetLastError = true, CharSet = CharSet.Auto)]
+        [SuppressUnmanagedCodeSecurity]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool LookupPrivilegeValue (
+            string lpSystemName, string lpName, out UInt64 lpLuid
+        );
+        [DllImport("advapi32", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool AdjustTokenPrivileges (
+            IntPtr tokenHandle,
+            [MarshalAs(UnmanagedType.Bool)]bool disableAllPrivileges,
+            ref TokenPrivileges newState,
+            UInt32 pOldStateMaxLength,
+            IntPtr pOldState,
+            IntPtr pOldStateLength
+        );
+        [DllImport("advapi32", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool OpenProcessToken (
+            IntPtr processHandle, 
+            [MarshalAs(UnmanagedType.U4)]
+            TokenAccessLevels desiredAccess, 
+            out IntPtr tokenHandle
+        );
+        [DllImport("user32", SetLastError = true)]
+        public static extern bool GetClientRect (IntPtr hWnd, out Rect lpRect);
+        [DllImport("user32", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool PrintWindow (IntPtr hwnd, IntPtr hDC, uint nFlags);
+        [DllImport("kernel32", SetLastError = true)]
+        public static extern IntPtr OpenThread (ThreadAccessFlags dwDesiredAccess, bool bInheritHandle, int dwThreadId);
+        [DllImport("kernel32", SetLastError = true)]
+        public static extern uint SuspendThread (IntPtr hThread);
+        [DllImport("kernel32", SetLastError = true)]
+        public static extern int ResumeThread (IntPtr hThread);
+        [DllImport("user32", SetLastError = true, CharSet=CharSet.Unicode)]
+        public static extern short VkKeyScan (short wchar);
 
         public static string GetWindowTextString (IntPtr hWnd) {
             int length = GetWindowTextLength(hWnd);
-            var sb = new StringBuilder(length);
-            int numChars = GetWindowText(hWnd, sb, length);
+            var sb = new StringBuilder(length + 1);
+            int numChars = GetWindowText(hWnd, sb, length + 1);
             if (numChars > 0)
                 return sb.ToString(0, numChars);
             else
@@ -230,6 +314,35 @@ namespace ShootBlues {
                 ));
 
             return new SafeProcessHandle(handle);
+        }
+
+        public static void AdjustProcessPrivilege (int processId, string privilegeName, bool privilegeStatus) {
+            UInt64 luid;
+            if (!LookupPrivilegeValue(null, privilegeName, out luid)) {
+                var error = GetLastError();
+                throw new Exception(String.Format("LookupPrivilegeValue failed: Error {0:x8}", error));
+            }
+
+            using (var handle = OpenProcessHandle(ProcessAccessFlags.QueryInformation, false, processId)) {
+                IntPtr token;
+                if (!OpenProcessToken(handle.DangerousGetHandle(), TokenAccessLevels.AdjustPrivileges | TokenAccessLevels.Query, out token)) {
+                    var error = GetLastError();
+                    throw new Exception(String.Format("OpenProcessToken failed: Error {0:x8}", error));
+                }
+                try {
+                    var newState = new TokenPrivileges {
+                        PrivilegeCount = 1,
+                        Luid = luid,
+                        Attributes = privilegeStatus ? PrivilegeAttributes.Enabled : PrivilegeAttributes.Removed
+                    };
+                    if (!AdjustTokenPrivileges(token, false, ref newState, 0, IntPtr.Zero, IntPtr.Zero)) {
+                        var error = GetLastError();
+                        throw new Exception(String.Format("AdjustTokenPrivileges failed: Error {0:x8}", error));
+                    }
+                } finally {
+                    CloseHandle(token);
+                }                
+            }
         }
     }
 }

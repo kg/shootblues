@@ -62,7 +62,7 @@ namespace ShootBlues {
         }
 
         protected unsafe byte[] ReadRemoteData (RemoteMemoryRegion region, out UInt32 messageId) {
-            using (var handle = region.OpenHandle()) {
+            using (var handle = region.OpenHandle(ProcessAccessFlags.VMRead)) {
                 messageId = BitConverter.ToUInt32(
                     region.ReadBytes(handle, 0, 4), 0
                 );
@@ -166,7 +166,7 @@ namespace ShootBlues {
                 _AwaitingResponses[messageID] = result;
             }
 
-            using (var handle = Win32.OpenProcessHandle(ProcessAccessFlags.All, false, _Process.Id)) {
+            using (var handle = Win32.OpenProcessHandle(ProcessAccessFlags.VMWrite | ProcessAccessFlags.VMOperation, false, _Process.Id)) {
                 RemoteMemoryRegion region;
                 var regionSize = messageSize + moduleNameSize + textSize + functionNameSize;
                 var buffer = new byte[regionSize];

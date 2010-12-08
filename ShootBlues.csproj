@@ -78,6 +78,7 @@
     <Compile Include="ErrorDialog.Designer.cs">
       <DependentUpon>ErrorDialog.cs</DependentUpon>
     </Compile>
+    <Compile Include="FunctionDisabler.cs" />
     <Compile Include="Interfaces.cs" />
     <Compile Include="LoadingWindow.cs">
       <SubType>Form</SubType>

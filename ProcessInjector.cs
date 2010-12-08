@@ -19,7 +19,10 @@ namespace ShootBlues {
         }
 
         public static RemoteMemoryRegion Allocate (Process process, UInt32 size) {
-            using (var handle = Win32.OpenProcessHandle(ProcessAccessFlags.All, false, process.Id)) {
+            using (var handle = Win32.OpenProcessHandle(
+                ProcessAccessFlags.VMOperation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite, 
+                false, process.Id
+            )) {
                 return Allocate(process, handle, size);
             }
         }
@@ -129,15 +132,15 @@ namespace ShootBlues {
             return oldProtect;
         }
 
-        public SafeProcessHandle OpenHandle () {
-            return Win32.OpenProcessHandle(ProcessAccessFlags.All, false, Process.Id);
+        public SafeProcessHandle OpenHandle (ProcessAccessFlags flags) {
+            return Win32.OpenProcessHandle(flags, false, Process.Id);
         }
 
         public void Dispose () {
             if (Address == IntPtr.Zero)
                 return;
 
-            using (var handle = OpenHandle()) {
+            using (var handle = OpenHandle(ProcessAccessFlags.VMOperation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite)) {
                 int result = Win32.VirtualFreeEx(
                     handle.DangerousGetHandle(),
                     Address, 0, FreeType.Release
@@ -159,8 +162,15 @@ namespace ShootBlues {
 
     public static class ProcessInjector {
         public static unsafe RemoteMemoryRegion Inject (Process process, PortableExecutable executable, IntPtr payloadArgument, Future<Int32> threadResultFuture, Future<UInt32> threadIdFuture) {
+            Win32.AdjustProcessPrivilege(Process.GetCurrentProcess().Id, "SeDebugPrivilege", true);
+
             RemoteMemoryRegion region = null;
-            using (var handle = Win32.OpenProcessHandle(ProcessAccessFlags.All, false, process.Id))
+            using (var handle = Win32.OpenProcessHandle(
+                ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite |
+                ProcessAccessFlags.VMOperation | ProcessAccessFlags.CreateThread | 
+                ProcessAccessFlags.QueryInformation, 
+                false, process.Id
+            )) 
             try {
                 region = RemoteMemoryRegion.Allocate(
                     process, handle, executable.OptionalHeader.SizeOfImage
