@@ -169,6 +169,12 @@ namespace ShootBlues {
         }
     }
 
+    public struct PendingFunctionCall {
+        public readonly string ModuleName, FunctionName;
+        public readonly object[] Parameters;
+        public readonly IFuture ResultFuture;
+    }
+
     public class ProcessInfo : IDisposable {
         public Process Process = null;
         public RPCChannel Channel = null;
@@ -177,6 +183,7 @@ namespace ShootBlues {
 
         internal HashSet<ScriptName> LoadedScripts = new HashSet<ScriptName>();
         internal HashSet<string> LoadedPythonModules = new HashSet<string>();
+        internal List<Func<IFuture>> PendingFunctionCalls = new List<Func<IFuture>>();
         private Dictionary<string, RPCResponseChannel> NamedChannels = new Dictionary<string, RPCResponseChannel>();
         private HashSet<IFuture> OwnedFutures = new HashSet<IFuture>();
 
@@ -219,6 +226,7 @@ namespace ShootBlues {
             NamedChannels.Clear();
 
             Channel.Dispose();
+            Process.Dispose();
         }
 
         public override int GetHashCode () {
@@ -822,7 +830,7 @@ namespace ShootBlues {
                     yield return Profile.WaitUntilProcessReady(pi);
 
                     RunningProcesses.Add(pi);
-                    pi.Status = "Loading scripts into process";
+                    string oldStatus = pi.Status = "Loading scripts into process";
                     EventBus.Broadcast(Profile, "RunningProcessAdded", pi);
 
                     var buildScriptList = new RunToCompletion<ScriptName[]>(
@@ -839,7 +847,9 @@ namespace ShootBlues {
                         );
 
                     if (!process.HasExited) {
-                        pi.Status = "Scripts loaded";
+                        if (pi.Status == oldStatus)
+                            pi.Status = "Scripts loaded";
+
                         EventBus.Broadcast(Profile, "RunningProcessChanged", pi);
 
                         using (fRpcTask)
@@ -1051,16 +1061,23 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
         public static Future<T> CallFunction<T> (ProcessInfo process, string moduleName, string functionName, params object[] arguments) {
             var f = new Future<T>();
+
+            return CallFunction<T>(process, moduleName, functionName, arguments, f);
+        }
+
+        public static Future<T> CallFunction<T> (ProcessInfo process, string moduleName, string functionName, object[] arguments, Future<T> result) {
             var serializer = new JavaScriptSerializer();
 
             if (!process.Ready) {
-                f.Fail(new Exception("Process not ready"));
-                return f;
+                process.PendingFunctionCalls.Add((Func<IFuture>)(() => CallFunction<T>(
+                    process, moduleName, functionName, arguments, result
+                )));
+                return result;
             }
 
             if (!process.LoadedPythonModules.Contains(moduleName)) {
-                f.Fail(new Exception(String.Format("Python module not loaded: {0}", moduleName)));
-                return f;
+                result.Fail(new Exception(String.Format("Python module not loaded: {0}", moduleName)));
+                return result;
             }
 
             if ((arguments != null) && (arguments.Length == 0))
@@ -1083,7 +1100,7 @@ rpcSend(result, id={1}L)", pythonText, messageID
                         var json = inner.Result.DecodeUTF8Z();
 
                         try {
-                            f.Complete(serializer.Deserialize<T>(json));
+                            result.Complete(serializer.Deserialize<T>(json));
                         } catch (ArgumentException) {
                             string errorText;
                             if (arguments != null)
@@ -1091,17 +1108,17 @@ rpcSend(result, id={1}L)", pythonText, messageID
                             else
                                 errorText = String.Format("Error when calling {0}.{1}:\r\n{2}", moduleName, functionName, json);
 
-                            f.Fail(new PythonException(process, errorText));
+                            result.Fail(new PythonException(process, errorText));
                         }
                     } catch (Exception ex) {
-                        f.Fail(ex);
+                        result.Fail(ex);
                     }
                 } else
-                    f.Fail(inner.Error);
+                    result.Fail(inner.Error);
             });
-            inner.RegisterOnDispose((_) => f.Dispose());
+            inner.RegisterOnDispose((_) => result.Dispose());
 
-            return f;
+            return result;
         }
 
         public static IEnumerator<object> ReloadAllScripts () {
@@ -1115,8 +1132,10 @@ rpcSend(result, id={1}L)", pythonText, messageID
         }
 
         private static IEnumerator<object> ReloadAllScripts (ScriptName[] scriptList) {
-            foreach (var pi in RunningProcesses)
+            foreach (var pi in RunningProcesses) {
                 pi.Ready = false;
+                pi.PendingFunctionCalls.Clear();
+            }
 
             try {
                 foreach (var pi in RunningProcesses) { 
@@ -1135,9 +1154,28 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
                 foreach (var pi in RunningProcesses)
                     yield return LoadScriptsInto(pi, scriptList);
+
+                foreach (var pi in RunningProcesses) {
+                    pi.Ready = true;
+                    yield return new Start(DispatchPendingCalls(pi), TaskExecutionPolicy.RunAsBackgroundTask);
+                }
             } finally {
                 foreach (var pi in RunningProcesses)
                     pi.Ready = true;
+            }
+        }
+
+        private static IEnumerator<object> DispatchPendingCalls (ProcessInfo pi) {
+            while (pi.PendingFunctionCalls.Count > 0) {
+                var pfc = pi.PendingFunctionCalls[0];
+                pi.PendingFunctionCalls.RemoveAt(0);
+
+                var fPfc = pfc();
+                yield return fPfc;
+
+                object result;
+                Exception error;
+                fPfc.GetResult(out result, out error);
             }
         }
 

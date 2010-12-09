@@ -35,12 +35,12 @@ namespace ShootBlues {
 
         protected IEnumerator<object> DirtyTask () {
             while (true) {
-                yield return Dirty.Wait();
-
                 var prefNames = DirtyPrefs.ToArray();
                 DirtyPrefs.Clear();
 
                 EventBus.Broadcast(this, "Changed", prefNames);
+
+                yield return Dirty.Wait();
             }
         }
 

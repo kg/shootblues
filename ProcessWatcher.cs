@@ -57,6 +57,8 @@ namespace ShootBlues {
                         if (!RunningProcessIds.Contains(process.Id)) {
                             RunningProcessIds.Add(process.Id);
                             NewProcesses.Enqueue(process);
+                        } else {
+                            process.Dispose();
                         }
                     }
                 }
