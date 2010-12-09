@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using Squared.Task;
 using System.Diagnostics;
+using System.Windows.Forms;
 
 namespace ShootBlues {
     public class SimpleExecutableProfile : DependencyManager, IProfile {
@@ -15,7 +16,7 @@ namespace ShootBlues {
 
             Name = new Filename(this.GetType().Assembly.Location).Name;
 
-            Watcher = new ProcessWatcher(executableName);
+            Watcher = new ProcessWatcher(Program.Scheduler, executableName);
         }
 
         public virtual string ProfileName {
@@ -28,6 +29,16 @@ namespace ShootBlues {
             while (Watcher != null) {
                 var fNewProcess = Watcher.NewProcesses.Dequeue();
                 yield return fNewProcess;
+
+                var process = fNewProcess.Result;
+
+                try {
+                    if (process.HasExited)
+                        continue;
+                } catch (Exception ex) {
+                    Program.ShowErrorMessage(String.Format("Access denied to process: {0}", ex), process);
+                    continue;
+                }
 
                 yield return new Start(
                     OnNewProcess(fNewProcess.Result), TaskExecutionPolicy.RunAsBackgroundTask

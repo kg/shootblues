@@ -228,7 +228,7 @@
             this.MinimumSize = new System.Drawing.Size(401, 300);
             this.Name = "StatusWindow";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Shoot Blues $version - $profile";
+            this.Text = "Shoot Blues";
             this.Shown += new System.EventHandler(this.StatusWindow_Shown);
             this.RunningProcessGroupBox.ResumeLayout(false);
             this.ButtonPanel.ResumeLayout(false);

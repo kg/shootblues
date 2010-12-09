@@ -162,8 +162,6 @@ namespace ShootBlues {
 
     public static class ProcessInjector {
         public static unsafe RemoteMemoryRegion Inject (Process process, PortableExecutable executable, IntPtr payloadArgument, Future<Int32> threadResultFuture, Future<UInt32> threadIdFuture) {
-            Win32.AdjustProcessPrivilege(Process.GetCurrentProcess().Id, "SeDebugPrivilege", true);
-
             RemoteMemoryRegion region = null;
             using (var handle = Win32.OpenProcessHandle(
                 ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite |

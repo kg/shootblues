@@ -20,6 +20,10 @@ struct RPCMessage {
 };
 #pragma pack(pop)
 
+typedef BOOL (WINAPI *pChangeWindowMessageFilter) (
+  __in UINT message, __in DWORD dwFlag
+);
+
 static HWND g_rpcWindow;
 static int g_rpcMessageId;
 
@@ -509,6 +513,17 @@ DWORD __stdcall payload (HWND rpcWindow) {
   MSG msg;
   // Create our thread message queue
   PeekMessage(&msg, 0, g_rpcMessageId, g_rpcMessageId, 0);
+
+  // Allow our thread to receive RPC messages from processes of lower integrity level
+  {
+    HMODULE hModule = LoadLibrary(L"user32.dll");
+
+    pChangeWindowMessageFilter pFn = (pChangeWindowMessageFilter)GetProcAddress(hModule, "ChangeWindowMessageFilter");
+    if (pFn)
+      pFn(g_rpcMessageId, MSGFLT_ADD);
+
+    FreeLibrary(hModule);
+  }
 
   // Initialize our python extensions
   PyGILState_STATE gil = PyGILState_Ensure();

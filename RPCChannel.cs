@@ -48,6 +48,7 @@ namespace ShootBlues {
             _Process = process;
 
             WM_RPC_MESSAGE = Win32.RegisterWindowMessage("ShootBlues.RPCMessage");
+
             var cp = new CreateParams {
                 Caption = "ShootBlues.RPCChannel",
                 X = 0,
@@ -59,6 +60,25 @@ namespace ShootBlues {
                 Parent = new IntPtr(-3)
             };
             CreateHandle(cp);
+
+            try {
+                if (!Win32.ChangeWindowMessageFilterEx(
+                    this.Handle, WM_RPC_MESSAGE, MessageFilterFlag.AllowMessage, IntPtr.Zero
+                )) {
+                    var error = Win32.GetLastError();
+                    throw new Exception(String.Format("Error changing window message filter: {0:x8}", error));
+                }
+            } catch (DllNotFoundException) {
+                try {
+                    if (!Win32.ChangeWindowMessageFilter(
+                        WM_RPC_MESSAGE, MessageFilterFlag.AllowMessage
+                    )) {
+                        var error = Win32.GetLastError();
+                        throw new Exception(String.Format("Error changing window message filter: {0:x8}", error));
+                    }
+                } catch (DllNotFoundException) {
+                }
+            }
         }
 
         protected unsafe byte[] ReadRemoteData (RemoteMemoryRegion region, out UInt32 messageId) {
@@ -195,7 +215,10 @@ namespace ShootBlues {
                     }
                 }
 
-                Win32.PostThreadMessage(RemoteThreadId, WM_RPC_MESSAGE, region.Address, region.Size);
+                if (!Win32.PostThreadMessage(RemoteThreadId, WM_RPC_MESSAGE, region.Address, region.Size)) {
+                    var error = Win32.GetLastError();
+                    throw new Exception(String.Format("Error posting thread message: {0:x8}", error));
+                }
             }
 
             return result;

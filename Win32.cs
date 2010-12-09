@@ -79,6 +79,12 @@ namespace ShootBlues {
         UsedForAccess = 0x80000000
     }
 
+    public enum MessageFilterFlag : uint {
+        Reset = 0,
+        AllowMessage = 1,
+        DisallowMessage = 2,
+    }
+
     [StructLayout(LayoutKind.Sequential, Pack=1)]
     public struct TokenPrivileges {
         public UInt32 PrivilegeCount;
@@ -261,6 +267,12 @@ namespace ShootBlues {
         public static extern int ResumeThread (IntPtr hThread);
         [DllImport("user32", SetLastError = true, CharSet=CharSet.Unicode)]
         public static extern short VkKeyScan (short wchar);
+        [DllImport("user32", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ChangeWindowMessageFilter (int message, MessageFilterFlag dwFlag);
+        [DllImport("user32", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ChangeWindowMessageFilterEx (IntPtr hWnd, int message, MessageFilterFlag dwFlag, IntPtr pChangeFilterStruct);
 
         public static string GetWindowTextString (IntPtr hWnd) {
             int length = GetWindowTextLength(hWnd);

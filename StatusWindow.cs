@@ -17,9 +17,7 @@ namespace ShootBlues {
             : base(scheduler) {
             InitializeComponent();
 
-            Text = Text.Replace(
-                "$version", String.Format("v{0}", Application.ProductVersion)
-            ).Replace("$profile", Program.Profile.ProfileName);
+            Text = Program.GetStatusText();
 
             SplitContainer.SplitterDistance = 130;
             SplitContainer.Panel1MinSize = 100;

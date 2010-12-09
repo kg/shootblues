@@ -12,6 +12,8 @@ using System.Web.Script.Serialization;
 using System.Data.SQLite;
 using Squared.Task.Data;
 using Squared.Util.Event;
+using System.Security.Principal;
+using System.Threading;
 
 namespace ShootBlues {
     public class PythonException : Exception {
@@ -262,6 +264,16 @@ namespace ShootBlues {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            bool isFirstInstance = false;
+            var mutex = new Mutex(true, "Local\\ShootBlues", out isFirstInstance);
+
+            if (!isFirstInstance) {
+                mutex.Close();
+                MessageBox.Show("Shoot Blues is already running.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                Environment.Exit(1);
+            }
+
+            using (mutex)
             using (Scheduler = new TaskScheduler(JobQueue.WindowsMessageBased))
             using (Database = new ConnectionWrapper(Scheduler, OpenDatabase(), true)) {
                 Scheduler.ErrorHandler = OnTaskError;
@@ -331,13 +343,17 @@ namespace ShootBlues {
         }
 
         public static void ShowErrorMessage (string text) {
-            ShowErrorMessage(text, null);
+            ShowErrorMessage(text, (Process)null);
         }
 
         public static void ShowErrorMessage (string text, ProcessInfo process) {
+            ShowErrorMessage(text, process.Process);
+        }
+
+        public static void ShowErrorMessage (string text, Process process) {
             string title = "Error in background task";
             if (process != null)
-                title = String.Format("Error in process {0}", process.Process.Id);
+                title = String.Format("Error in process {0}", process.Id);
 
             if (ErrorDialogInstance == null) {
                 ErrorDialogInstance = new ErrorDialog(Scheduler);
@@ -354,7 +370,30 @@ namespace ShootBlues {
             ErrorDialogInstance = null;
         }
 
+        public static string GetStatusText () {
+            bool isAdmin = false;
+            try {
+                isAdmin = new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator) ? true : false;
+            } catch {
+            }
+
+            string result;
+            if (Profile != null)
+                result = String.Format("Shoot Blues v{0} - {1}", Application.ProductVersion, Profile.ProfileName);
+            else
+                result = String.Format("Shoot Blues v{0}", Application.ProductVersion);
+
+            result += isAdmin ? " (Administrator)" : " (Limited User)";
+            return result;
+        }
+
         private static IEnumerator<object> MainTask () {
+            // We need to enable the debug privilege for our process before doing anything
+            //  because the System.Diagnostics.Process class attempts to open process handles
+            //  even though it may not have rights to do so. The debug privilege ensures that
+            //  opening handles will succeed.
+            Win32.AdjustProcessPrivilege(Process.GetCurrentProcess().Id, "SeDebugPrivilege", true);
+
             TrayMenu = new ContextMenuStrip();
             TrayMenu.AddItem("&Status", (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask));
             TrayMenu.Items.Add("-");
@@ -363,11 +402,11 @@ namespace ShootBlues {
             using (TrayMenu)
             using (var loadingWindow = new LoadingWindow())
             using (TrayIcon = new NotifyIcon {
-                Text = "Shoot Blues v" + Application.ProductVersion,
+                Text = GetStatusText(),
                 Icon = Properties.Resources.icon,
                 ContextMenuStrip = TrayMenu
             }) {
-                TrayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
+                TrayIcon.Visible = true;
 
                 loadingWindow.SetStatus("Loading profile", null);
                 loadingWindow.Show();
@@ -400,8 +439,8 @@ namespace ShootBlues {
                     EventBus.Subscribe(Profile, "OnScriptsAdded", Scheduler, OnScriptsChanging);
                     EventBus.Subscribe(Profile, "OnScriptRemoved", Scheduler, OnScriptsChanging);
 
-                    TrayIcon.Text = TrayIcon.Text + " - " + Profile.ProfileName;
-                    TrayIcon.Visible = true;
+                    TrayIcon.DoubleClick += (s, e) => Scheduler.Start(ShowStatusWindow(), TaskExecutionPolicy.RunAsBackgroundTask);
+                    TrayIcon.Text = GetStatusText();
 
                     yield return OnScriptsChanging(null);
 
@@ -737,6 +776,9 @@ namespace ShootBlues {
         }
 
         public static IEnumerator<object> NotifyNewProcess (Process process) {
+            if (process.HasExited)
+                yield break;
+
             var payload = Future.RunInThread(() => {
                 using (var payloadStream = Assembly.GetExecutingAssembly().
                     GetManifestResourceStream("ShootBlues.payload.dll")) {
