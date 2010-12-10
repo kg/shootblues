@@ -225,8 +225,16 @@ namespace ShootBlues {
                 region = null;
                 return theResult;
             } finally {
-                if (!process.HasExited && (region != null))
-                    region.Dispose();
+                if (region != null) {
+                    bool exited = true;
+                    try {
+                        exited = process.HasExited;
+                    } catch {
+                    }
+
+                    if (!exited)
+                        region.Dispose();
+                }
             }
         }
     }

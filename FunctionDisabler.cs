@@ -77,7 +77,7 @@ namespace ShootBlues {
             if (DisabledFunctions.ContainsKey(key))
                 return;
 
-            if (Process.Process.HasExited)
+            if (!Process.IsAlive)
                 return;
 
             var region = GetFunctionRegion(moduleName, functionName);
@@ -100,7 +100,7 @@ namespace ShootBlues {
             if (!DisabledFunctions.ContainsKey(key))
                 return;
 
-            if (Process.Process.HasExited)
+            if (!Process.IsAlive)
                 return;
 
             var region = GetFunctionRegion(moduleName, functionName);

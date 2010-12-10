@@ -237,6 +237,16 @@ namespace ShootBlues {
             return String.Format("{0} - {1}", Process.Id, Status);
         }
 
+        public bool IsAlive {
+            get {
+                try {
+                    return !(Process.HasExited);
+                } catch {
+                    return false;
+                }
+            }
+        }
+
         public override bool Equals (object obj) {
             var rhs = obj as ProcessInfo;
             if (rhs != null) {
@@ -840,7 +850,7 @@ namespace ShootBlues {
                     );
                     yield return buildScriptList;
 
-                    if (!process.HasExited)
+                    if (pi.IsAlive)
                         yield return Future.WaitForFirst(
                             Scheduler.Start(
                                 LoadScriptsInto(pi, buildScriptList.Result),
@@ -848,7 +858,7 @@ namespace ShootBlues {
                             ), processExit
                         );
 
-                    if (!process.HasExited) {
+                    if (pi.IsAlive) {
                         if (pi.Status == oldStatus)
                             pi.Status = "Scripts loaded";
 
