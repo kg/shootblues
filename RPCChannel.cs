@@ -210,7 +210,10 @@ namespace ShootBlues {
                     try {
                         region.Write(handle, 0, regionSize, pBuffer);
                     } catch {
-                        region.Dispose();
+                        try {
+                            region.Dispose();
+                        } catch {
+                        }
                         throw;
                     }
                 }

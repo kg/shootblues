@@ -71,7 +71,7 @@ namespace ShootBlues {
             item.SelectedImageKey = item.ImageKey = filename;
         }
 
-        private TreeNode BuildScriptNode (ScriptName script, bool optional, out bool shouldExpand) {
+        private TreeNode BuildScriptNode (ScriptName script, bool optional, HashSet<ScriptName> traversal, out bool shouldExpand) {
             var filename = Program.FindScript(script);
 
             var item = new TreeNode();
@@ -87,18 +87,22 @@ namespace ShootBlues {
             item.Text = text;
             item.Tag = filename;
 
-            SetNodeIcon(item, filename);
+            SetNodeIcon(item, filename ?? script.Name);
 
             shouldExpand = false;
             bool se = false;
 
             IManagedScript instance = Program.GetScriptInstance(script);
             if (instance != null) {
-                foreach (var dep in instance.Dependencies)
-                    item.Nodes.Add(BuildScriptNode(dep, false, out se));
+                if (!traversal.Contains(script)) {
+                    traversal.Add(script);
 
-                foreach (var dep in instance.OptionalDependencies)
-                    item.Nodes.Add(BuildScriptNode(dep, true, out se));
+                    foreach (var dep in instance.Dependencies)
+                        item.Nodes.Add(BuildScriptNode(dep, false, traversal, out se));
+
+                    foreach (var dep in instance.OptionalDependencies)
+                        item.Nodes.Add(BuildScriptNode(dep, true, traversal, out se));
+                }
 
                 if (se) {
                     item.Expand();
@@ -132,17 +136,23 @@ namespace ShootBlues {
             while (ScriptImageList.Images.Count > 2)
                 ScriptImageList.Images.RemoveAt(2);
 
+            HashSet<ScriptName> traversal = new HashSet<ScriptName>();
+
             bool temp = false;
             {
                 var profileNode = new TreeNode(String.Format("Profile: {0}", Program.Profile.ProfileName));
                 SetNodeIcon(profileNode, Program.ProfilePath);
                 ScriptsList.Nodes.Add(profileNode);
-                foreach (var dep in Program.Profile.Dependencies)
-                    profileNode.Nodes.Add(BuildScriptNode(dep, false, out temp));
+
+                foreach (var dep in Program.Profile.Dependencies) {
+                    traversal.Clear();
+                    profileNode.Nodes.Add(BuildScriptNode(dep, false, traversal, out temp));
+                }
             }
 
             foreach (var script in Program.Scripts.OrderBy((fn) => fn.NameWithoutExtension)) {
-                var item = BuildScriptNode(script.Name, false, out temp);
+                traversal.Clear();
+                var item = BuildScriptNode(script.Name, false, traversal, out temp);
 
                 ScriptsList.Nodes.Add(item);
                 if (script == selectedScript)

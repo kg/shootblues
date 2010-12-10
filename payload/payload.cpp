@@ -490,6 +490,10 @@ PyObject * createRpcChannel (PyObject * self, PyObject * args) {
   return obj;
 }
 
+PyObject * noOp (PyObject * self, PyObject * args) {
+  return Py_BuildValue("");
+}
+
 static PyMethodDef PythonMethods[] = {
   {"rpcSend", (PyCFunction)rpcSend, METH_KEYWORDS, "Send an RPC message to the parent process."},
   {"run", (PyCFunction)run, METH_KEYWORDS, "Compiles and runs a script block."},
@@ -499,6 +503,8 @@ static PyMethodDef PythonMethods[] = {
   {"createChannel", createRpcChannel, METH_VARARGS, "Creates an RPC response channel."},
   {"find_module", (PyCFunction)findModule, METH_KEYWORDS, "Implements the Finder protocol (PEP 302)."},
   {"load_module", loadModule, METH_VARARGS, "Implements the Loader protocol (PEP 302)."},
+  {"Dependency", noOp, METH_VARARGS, "Specifies that your script depends on another script to function, so that it will be loaded before your script."},
+  {"OptionalDependency", noOp, METH_VARARGS, "Specifies that your script benefits from another script's presence, so that it will be loaded before your script."},
   {NULL, NULL, 0, NULL}
 };
 

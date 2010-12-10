@@ -40,6 +40,11 @@ namespace ShootBlues {
             get { return _OptionalDependencies; }
         }
 
+        protected void ClearDependencies () {
+            _Dependencies.Clear();
+            _OptionalDependencies.Clear();
+        }
+
         protected void AddDependency (string name, bool optional) {
             string searchPath = Name.DefaultSearchPath;
 

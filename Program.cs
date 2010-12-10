@@ -734,6 +734,8 @@ namespace ShootBlues {
                 }
             }
 
+            Console.WriteLine(String.Join(", ", (from sn in result select sn.Name).ToArray()));
+
             yield return new Result(result.ToArray());
         }
 
@@ -1151,6 +1153,13 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
                 foreach (var scriptName in scriptList)
                     yield return new RunAsBackground(LoadedScripts[scriptName].Reload());
+
+                // Scripts are allowed to change their dependency list after a reload
+                var buildScriptList = new RunToCompletion<ScriptName[]>(
+                    BuildOrderedScriptList(null), TaskExecutionPolicy.RunWhileFutureLives
+                );
+                yield return buildScriptList;
+                scriptList = buildScriptList.Result;
 
                 foreach (var pi in RunningProcesses)
                     yield return LoadScriptsInto(pi, scriptList);
