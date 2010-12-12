@@ -267,6 +267,7 @@ namespace ShootBlues {
 
         internal static Dictionary<ScriptName, IManagedScript> LoadedScripts = new Dictionary<ScriptName, IManagedScript>();
 
+        public static readonly Dictionary<string, ScriptName> PythonModuleToScript = new Dictionary<string, ScriptName>();
         public static readonly HashSet<ProcessInfo> RunningProcesses = new HashSet<ProcessInfo>();
         public static readonly HashSet<Filename> Scripts = new HashSet<Filename>();
         public static readonly HashSet<ScriptName> FailedScripts = new HashSet<ScriptName>();

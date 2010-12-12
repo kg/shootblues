@@ -74,6 +74,8 @@ namespace ShootBlues {
             if (ScriptText == null)
                 yield return Reload();
 
+            Program.PythonModuleToScript[ModuleName] = Name;
+
             yield return Program.LoadPythonScript(
                 process, ModuleName, ScriptText
             );
@@ -95,6 +97,9 @@ namespace ShootBlues {
             yield return Program.UnloadPythonScript(
                 process, ModuleName
             );
+
+            if (Program.PythonModuleToScript.ContainsKey(ModuleName))
+                Program.PythonModuleToScript.Remove(ModuleName);
         }
     }
 }

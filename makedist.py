@@ -38,14 +38,17 @@ def main():
     
     shutil.copy(r"bin\ShootBlues.exe", r"dist\temp")
     
-    for fn in glob(r"bin\*.dll"):
-        shutil.copy(fn, r"dist\temp")
-    
-    for fn in glob(r"bin\*.py"):
-        shutil.copy(fn, r"dist\temp")
-    
-    for fn in glob(r"bin\*.db"):
-        shutil.copy(fn, r"dist\temp")
+    globs = (
+        r"bin\*.dll",
+        r"bin\*.py",
+        r"bin\*.db",
+        r"bin\*.wav",
+        r"bin\*.mp3"
+    )
+        
+    for g in globs:
+        for fn in glob(g):
+            shutil.copy(fn, r"dist\temp")
     
     print "-- Compressing package --"   
     (result, exitCode) = runProcess(r"ext\7zip\7z.exe a -r -t7z dist\shootblues.7z .\dist\temp\*.*")

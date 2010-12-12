@@ -7,6 +7,7 @@ using System.Text;
 using System.Windows.Forms;
 using Squared.Task;
 using System.IO;
+using System.Web;
 
 namespace ShootBlues {
     public partial class StatusWindow : TaskForm, IStatusWindow {
@@ -80,7 +81,7 @@ namespace ShootBlues {
                 var appUri = new Uri(Path.GetDirectoryName(Application.ExecutablePath) + "\\");
                 var uri = new Uri(filename);
                 var relUri = appUri.MakeRelativeUri(uri);
-                text = relUri.ToString().Replace("/", "\\");
+                text = HttpUtility.UrlDecode(relUri.ToString().Replace("/", "\\"));
             } else {
                 text = script.Name;
             }
