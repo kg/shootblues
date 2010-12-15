@@ -140,6 +140,13 @@ namespace ShootBlues {
             if (Address == IntPtr.Zero)
                 return;
 
+            try {
+                if (Process.HasExited)
+                    return;
+            } catch {
+                return;
+            }
+
             using (var handle = OpenHandle(ProcessAccessFlags.VMOperation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite)) {
                 int result = Win32.VirtualFreeEx(
                     handle.DangerousGetHandle(),

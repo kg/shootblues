@@ -471,33 +471,36 @@ namespace ShootBlues {
         }
 
         public static IEnumerator<object> Teardown () {
-            Console.WriteLine("Shutting down...");
+            try {
+                Console.WriteLine("Shutting down...");
 
-            foreach (var process in RunningProcesses) {
-                Console.WriteLine("Unloading scripts from process {0}...", process.Process.Id);
+                foreach (var process in RunningProcesses) {
+                    Console.WriteLine("Unloading scripts from process {0}...", process.Process.Id);
 
-                foreach (var scriptName in process.LoadedScripts)
-                    yield return LoadedScripts[scriptName].UnloadFrom(process);
+                    foreach (var scriptName in process.LoadedScripts)
+                        yield return LoadedScripts[scriptName].UnloadFrom(process);
 
-                yield return process.Channel.Send(new RPCMessage {
-                    Type = RPCMessageType.ReloadModules
-                }, true);
-                
-                process.LoadedScripts.Clear();
-                process.Dispose();
+                    yield return process.Channel.Send(new RPCMessage {
+                        Type = RPCMessageType.ReloadModules
+                    }, true);
+
+                    process.LoadedScripts.Clear();
+                    process.Dispose();
+                }
+
+                RunningProcesses.Clear();
+
+                Console.WriteLine("Destroying scripts...");
+
+                foreach (var script in LoadedScripts.Values)
+                    script.Dispose();
+
+                LoadedScripts.Clear();
+
+                Console.WriteLine("Done shutting down.");
+            } finally {
+                Application.Exit();
             }
-
-            RunningProcesses.Clear();
-
-            Console.WriteLine("Destroying scripts...");
-
-            foreach (var script in LoadedScripts.Values)
-                script.Dispose();
-
-            LoadedScripts.Clear();
-
-            Console.WriteLine("Done shutting down.");
-            Application.Exit();
         }
 
         public static IEnumerator<object> AttachDB (string dbName) {
@@ -517,9 +520,26 @@ namespace ShootBlues {
         }
 
         public static IEnumerator<object> DefaultTableConverter (string oldTableName, string newTableName, string oldTableSql, string newTableSql) {
-            yield return Database.ExecuteSQL(String.Format(
-                "INSERT INTO {0} SELECT * FROM {1}", newTableName, oldTableName
-            ));
+            string sql;
+
+            using (var q = Database.BuildQuery(String.Format("SELECT * FROM {0}", oldTableName))) {
+                var fReader = q.ExecuteReader();
+                yield return fReader;
+
+                using (fReader.Result) {
+                    var reader = fReader.Result.Reader;
+                    int numColumns = reader.FieldCount;
+                    var columnNames = new string[numColumns];
+                    for (int i = 0; i < numColumns; i++)
+                        columnNames[i] = reader.GetName(i);
+
+                    sql = String.Format(
+                        "INSERT INTO {0} ({2}) SELECT {2} FROM {1}", newTableName, oldTableName, String.Join(", ", columnNames)
+                    );
+                }
+            }
+
+            yield return Database.ExecuteSQL(sql);
         }
 
         public static IEnumerator<object> CreateDBTable (string tableName, string tableDef) {
@@ -533,12 +553,14 @@ namespace ShootBlues {
             string newSql = String.Format("CREATE TABLE {0} {1}", tableName, tableDef);
             string oldName = String.Format("{0}_old", tableName);
 
-            using (var q = Database.BuildQuery(@"SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'"))
-                yield return q.ExecuteScalar<string>(tableName).Bind(() => sql);
-
-            if (String.Compare(sql, newSql, true) != 0)
             using (var xact = Database.CreateTransaction(true)) {
                 yield return xact;
+
+                using (var q = Database.BuildQuery(@"SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'"))
+                    yield return q.ExecuteScalar<string>(tableName).Bind(() => sql);
+
+                if (String.Compare(sql, newSql, true) == 0)
+                    yield break;
 
                 if (sql != null)
                     yield return Database.ExecuteSQL(String.Format("ALTER TABLE {0} RENAME TO {1}", tableName, oldName));

@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 namespace ShootBlues {
     public class PythonScript : ManagedScript {
         private string ScriptText = null;
+        private bool ProbablyHasLoadMethod = false;
         private Regex DependencyRegex = new Regex(
             @"(Dependency\(['""](?'dependency'[\w\.]+)['""]\)|OptionalDependency\(['""](?'optionaldependency'[\w\.]+)['""]\))", 
             RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.ExplicitCapture
@@ -34,6 +35,8 @@ namespace ShootBlues {
                 yield return fText;
 
                 ScriptText = fText.Result;
+
+                ProbablyHasLoadMethod = ScriptText.Contains("__load__");
 
                 yield return ParseDependencies();
             } else {
@@ -82,15 +85,8 @@ namespace ShootBlues {
         }
 
         public override IEnumerator<object> LoadedInto (ProcessInfo process) {
-            var f = Program.CallFunction(process, ModuleName, "__load__");
-            yield return f;
-            
-            var exc = f.Error;
-            if (exc != null) {
-                var errorString = exc.Message;
-                if (!errorString.Contains("AttributeError: 'module' object has no attribute '__load__'"))
-                    throw exc;
-            }
+            if (ProbablyHasLoadMethod)
+                yield return Program.CallFunction(process, ModuleName, "__load__");
         }
 
         public override IEnumerator<object> UnloadFrom (ProcessInfo process) {
