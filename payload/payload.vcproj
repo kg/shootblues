@@ -121,6 +121,7 @@
 				RuntimeLibrary="0"
 				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="false"
+				RuntimeTypeInfo="false"
 				UsePrecompiledHeader="0"
 				AssemblerOutput="2"
 				WarningLevel="3"

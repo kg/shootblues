@@ -68,7 +68,7 @@ namespace ShootBlues {
                     var error = Win32.GetLastError();
                     throw new Exception(String.Format("Error changing window message filter: {0:x8}", error));
                 }
-            } catch (DllNotFoundException) {
+            } catch (EntryPointNotFoundException) {
                 try {
                     if (!Win32.ChangeWindowMessageFilter(
                         WM_RPC_MESSAGE, MessageFilterFlag.AllowMessage
@@ -76,7 +76,7 @@ namespace ShootBlues {
                         var error = Win32.GetLastError();
                         throw new Exception(String.Format("Error changing window message filter: {0:x8}", error));
                     }
-                } catch (DllNotFoundException) {
+                } catch (EntryPointNotFoundException) {
                 }
             }
         }
