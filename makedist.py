@@ -50,6 +50,14 @@ def main():
         for fn in glob(g):
             shutil.copy(fn, r"dist\temp")
     
+    print "-- Signing executable --"
+    (result, exitCode) = runProcess("signtool sign /sha1 89E79C228291585064829B204E1D3571BC3CEDB0 " +
+        "/d \"Shoot Blues Python Injection Toolkit\" " +
+        "/du \"http://help.shootblues.com/\" " +
+        "/t http://timestamp.globalsign.com/scripts/timstamp.dll " +
+        r"dist\temp\ShootBlues.exe"
+    )
+    
     print "-- Compressing package --"   
     (result, exitCode) = runProcess(r"ext\7zip\7z.exe a -r -t7z dist\shootblues.7z .\dist\temp\*.*")
     if exitCode != 0:
