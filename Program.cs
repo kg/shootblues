@@ -850,8 +850,9 @@ namespace ShootBlues {
                     0xb8, 0x01, 0x00, 0x00, 0x00, 0xc2, 0x04, 0x00, 0x90
                 };
 
-                // Temporarily disable DLL_THREAD_ATTACH before we start our thread, if we can
-                //  ( this is a race, unfortunately :-( )
+                // Suspend the target process before we inject
+                var ps = KernelFunctionDisabler.SuspendProcess(process);
+                // Temporarily disable DLL_THREAD_ATTACH before we start our thread, if we can.
                 var kfd = new KernelFunctionDisabler(process);
                 try {
                     kfd.ReplaceFunction(
@@ -871,20 +872,26 @@ namespace ShootBlues {
                 pi.Channel.RemoteThreadId = threadId.Result;
 
                 using (fCodeRegion.Result) {
+                    RunningProcesses.Add(pi);
+                    pi.Status = "Waiting for startup";
+
                     yield return Future.WaitForFirst(
                         pi.Channel.Receive(), processExit
                     );
                     pi.Ready = true;
 
                     // Now that we know our payload thread is running (because it sent 
-                    //  us a message), we can re-enable DLL_THREAD_ATTACH
+                    //  us a message), we can re-enable DLL_THREAD_ATTACH and resume the process's other threads
                     kfd.Dispose();
+                    ps.Dispose();
+
+                    // At this point the process is alive again so our payload will have a chance to begin
+                    //  initializing its python data structures, and it should accept RPCs relatively soon
 
                     var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
 
                     yield return Profile.WaitUntilProcessReady(pi);
 
-                    RunningProcesses.Add(pi);
                     string oldStatus = pi.Status = "Loading scripts into process";
                     EventBus.Broadcast(Profile, "RunningProcessAdded", pi);
 

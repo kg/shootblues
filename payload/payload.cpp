@@ -516,7 +516,28 @@ int __cdecl EnsureGILCreated (void * arg) {
 }
 
 DWORD __stdcall payload (HWND rpcWindow) {
+  g_rpcWindow = rpcWindow;
+  g_rpcMessageId = RegisterWindowMessage(L"ShootBlues.RPCMessage");
+
+  MSG msg;
+  // Create our thread message queue
+  PeekMessage(&msg, 0, g_rpcMessageId, g_rpcMessageId, 0);
+
   HMODULE hModule;
+
+  // Allow our thread to receive RPC messages from processes of lower integrity level
+  {
+    hModule = LoadLibrary(L"user32.dll");
+
+    pChangeWindowMessageFilter pFn = (pChangeWindowMessageFilter)GetProcAddress(hModule, "ChangeWindowMessageFilter");
+    if (pFn)
+      pFn(g_rpcMessageId, MSGFLT_ADD);
+
+    FreeLibrary(hModule);
+  }  
+
+  // Post a null message to alert the parent process that we are alive
+  PostMessage(rpcWindow, g_rpcMessageId, 0, 0);
 
   // Ensure that we do not load python before the host process has, because that can cause a crash
   while (GetModuleHandleEx(
@@ -536,24 +557,6 @@ DWORD __stdcall payload (HWND rpcWindow) {
   //  will not fail or crash
   while (!PyEval_ThreadsInitialized())
     Sleep(100);
-
-  g_rpcWindow = rpcWindow;
-  g_rpcMessageId = RegisterWindowMessage(L"ShootBlues.RPCMessage");
-
-  MSG msg;
-  // Create our thread message queue
-  PeekMessage(&msg, 0, g_rpcMessageId, g_rpcMessageId, 0);
-
-  // Allow our thread to receive RPC messages from processes of lower integrity level
-  {
-    hModule = LoadLibrary(L"user32.dll");
-
-    pChangeWindowMessageFilter pFn = (pChangeWindowMessageFilter)GetProcAddress(hModule, "ChangeWindowMessageFilter");
-    if (pFn)
-      pFn(g_rpcMessageId, MSGFLT_ADD);
-
-    FreeLibrary(hModule);
-  }
 
   // Initialize our python extensions
   PyGILState_STATE gil = PyGILState_Ensure();
@@ -589,9 +592,6 @@ DWORD __stdcall payload (HWND rpcWindow) {
   g_tracebackModule = PyImport_ImportModule("traceback");
 
   PyGILState_Release(gil);
-
-  // Post a null message to alert the parent process that we are alive and ready for messages
-  PostMessage(rpcWindow, g_rpcMessageId, 0, 0);
 
   BOOL result;
   while ((result = GetMessage(&msg, 0, g_rpcMessageId, g_rpcMessageId)) != 0) {
