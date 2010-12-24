@@ -508,9 +508,33 @@ static PyMethodDef PythonMethods[] = {
   {NULL, NULL, 0, NULL}
 };
 
+int __cdecl EnsureGILCreated (void * arg) {
+  // This is supposed to acquire the GIL, but because AddPendingCall ensures that
+  //  we already have the GIL, we don't need to release it here... confusing
+  PyEval_InitThreads();
+  return 0;
+}
+
 DWORD __stdcall payload (HWND rpcWindow) {
+  HMODULE hModule;
+
+  // Ensure that we do not load python before the host process has, because that can cause a crash
+  while (GetModuleHandleEx(
+    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, L"python27.dll", &hModule
+  ) == 0)
+    Sleep(100);
+
   // Wait for an initialized python environment in our host process
   while (!Py_IsInitialized())
+    Sleep(100);
+
+  // If the threading lock has not been created, we ask python to create it at the earliest possibility
+  if (!PyEval_ThreadsInitialized())
+    Py_AddPendingCall(EnsureGILCreated, 0);
+
+  // Wait for the threading lock to be created so that our attempts to acquire the GIL later
+  //  will not fail or crash
+  while (!PyEval_ThreadsInitialized())
     Sleep(100);
 
   g_rpcWindow = rpcWindow;
@@ -522,7 +546,7 @@ DWORD __stdcall payload (HWND rpcWindow) {
 
   // Allow our thread to receive RPC messages from processes of lower integrity level
   {
-    HMODULE hModule = LoadLibrary(L"user32.dll");
+    hModule = LoadLibrary(L"user32.dll");
 
     pChangeWindowMessageFilter pFn = (pChangeWindowMessageFilter)GetProcAddress(hModule, "ChangeWindowMessageFilter");
     if (pFn)

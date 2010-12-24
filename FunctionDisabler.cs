@@ -7,16 +7,22 @@ using Squared.Task;
 using System.Diagnostics;
 
 namespace ShootBlues {
+    public class FunctionNotExportedException : Exception {
+        public FunctionNotExportedException (string moduleName, string functionName) 
+            : base (String.Format("The function '{1}' is not exported by the module '{0}'.", moduleName, functionName)) {
+        }
+    }
+
     public class KernelFunctionDisabler : IDisposable {
-        // xor eax, eax; ret 4
+        // xor eax, eax; ret 4; nop
         public static readonly byte[] ReplacementBytes = new byte[] {
-            0x33, 0xC0, 0xC2, 0x04, 0x00, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90
+            0x33, 0xC0, 0xC2, 0x04, 0x00, 0x90
         };
 
         public readonly Dictionary<Pair<string>, byte[]> DisabledFunctions = new Dictionary<Pair<string>, byte[]>();
-        public readonly ProcessInfo Process;
+        public readonly Process Process;
 
-        public KernelFunctionDisabler (ProcessInfo process) {
+        public KernelFunctionDisabler (Process process) {
             Process = process;
         }
 
@@ -33,7 +39,7 @@ namespace ShootBlues {
             try {
                 var procAddress = new IntPtr(Win32.GetProcAddress(hModule, functionName));
                 if (procAddress == IntPtr.Zero)
-                    throw new Exception(String.Format("Function {1} not exported by module {0}", moduleName, functionName));
+                    throw new FunctionNotExportedException(moduleName, functionName);
 
                 return procAddress;
             } finally {
@@ -41,17 +47,20 @@ namespace ShootBlues {
             }
         }
 
-        protected RemoteMemoryRegion GetFunctionRegion (string moduleName, string functionName) {
+        protected RemoteMemoryRegion GetFunctionRegion (string moduleName, string functionName, byte[] replacementBytes) {
             var address = GetFunctionAddress(moduleName, functionName);
             return RemoteMemoryRegion.Existing(
-                Process.Process, address, (uint)ReplacementBytes.Length
+                Process, address, (uint)replacementBytes.Length
             );
         }
 
-        protected Finally SuspendProcess () {
-            foreach (ProcessThread thread in Process.Process.Threads) {
+        public static Finally SuspendProcess (Process process) {
+            var suspendedThreads = new HashSet<Int64>();
+
+            foreach (ProcessThread thread in process.Threads) {
                 var hThread = Win32.OpenThread(ThreadAccessFlags.SuspendResume, false, thread.Id);
                 if (hThread != IntPtr.Zero) {
+                    suspendedThreads.Add(hThread.ToInt64());
                     Win32.SuspendThread(hThread);
                     Win32.CloseHandle(hThread);
                 } else {
@@ -60,34 +69,42 @@ namespace ShootBlues {
             }
 
             return Finally.Do(() => {
-                foreach (ProcessThread thread in Process.Process.Threads) {
+                foreach (ProcessThread thread in process.Threads) {
                     var hThread = Win32.OpenThread(ThreadAccessFlags.SuspendResume, false, thread.Id);
-                    if (hThread != IntPtr.Zero) {
+                    if ((hThread != IntPtr.Zero) && (suspendedThreads.Contains(hThread.ToInt64()))) {
                         Win32.ResumeThread(hThread);
                         Win32.CloseHandle(hThread);
                     } else {
-                        Console.WriteLine("Could not open thread {0}", thread.Id);
+                        Console.WriteLine("Could not resume thread {0}", thread.Id);
                     }
                 }
             });
         }
 
         public unsafe void DisableFunction (string moduleName, string functionName) {
+            ReplaceFunction(moduleName, functionName, ReplacementBytes);
+        }
+
+        public unsafe void ReplaceFunction (string moduleName, string functionName, byte[] replacementBytes) {
             var key = new Pair<string>(moduleName, functionName);
             if (DisabledFunctions.ContainsKey(key))
                 return;
 
-            if (!Process.IsAlive)
+            try {
+                if (Process.HasExited)
+                    return;
+            } catch {
                 return;
+            }
 
-            var region = GetFunctionRegion(moduleName, functionName);
-            using (var suspend = SuspendProcess())
+            var region = GetFunctionRegion(moduleName, functionName, replacementBytes);
+            using (var suspend = SuspendProcess(Process))
             using (var handle = region.OpenHandle(ProcessAccessFlags.VMOperation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite)) {
                 var oldProtect = region.Protect(handle, 0, region.Size, MemoryProtection.ReadWrite);
                 try {
                     var oldBytes = region.ReadBytes(handle, 0, region.Size);
                     DisabledFunctions[key] = oldBytes;
-                    fixed (byte* pReplacement = ReplacementBytes)
+                    fixed (byte* pReplacement = replacementBytes)
                         region.Write(handle, 0, region.Size, pReplacement);
                 } finally {
                     region.Protect(handle, 0, region.Size, oldProtect);
@@ -100,16 +117,21 @@ namespace ShootBlues {
             if (!DisabledFunctions.ContainsKey(key))
                 return;
 
-            if (!Process.IsAlive)
+            try {
+                if (Process.HasExited)
+                    return;
+            } catch {
                 return;
+            }
 
-            var region = GetFunctionRegion(moduleName, functionName);
-            using (var suspend = SuspendProcess())
+            var oldBytes = DisabledFunctions[key];
+            DisabledFunctions.Remove(key);
+
+            var region = GetFunctionRegion(moduleName, functionName, oldBytes);
+            using (var suspend = SuspendProcess(Process))
             using (var handle = region.OpenHandle(ProcessAccessFlags.VMOperation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite)) {
                 var oldProtect = region.Protect(handle, 0, region.Size, MemoryProtection.ReadWrite);
                 try {
-                    var oldBytes = DisabledFunctions[key];
-                    DisabledFunctions.Remove(key);
                     fixed (byte* pOldBytes = oldBytes)
                         region.Write(handle, 0, region.Size, pOldBytes);
                 } finally {

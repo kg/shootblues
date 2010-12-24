@@ -845,6 +845,22 @@ namespace ShootBlues {
                 var payloadResult = new Future<Int32>();
                 var threadId = new Future<UInt32>();
 
+                // mov eax, 1; ret 4; nop
+                var returnOne = new byte[] {
+                    0xb8, 0x01, 0x00, 0x00, 0x00, 0xc2, 0x04, 0x00, 0x90
+                };
+
+                // Temporarily disable DLL_THREAD_ATTACH before we start our thread, if we can
+                //  ( this is a race, unfortunately :-( )
+                var kfd = new KernelFunctionDisabler(process);
+                try {
+                    kfd.ReplaceFunction(
+                        "ntdll.dll", "RtlIsCurrentThreadAttachExempt", returnOne
+                    );
+                } catch (FunctionNotExportedException) {
+                    // If the current version of windows doesn't export it, no big deal
+                }
+
                 var fCodeRegion = Future.RunInThread(() =>
                     ProcessInjector.Inject(process, payload.Result, pi.Channel.Handle, payloadResult, threadId)
                 );
@@ -859,6 +875,10 @@ namespace ShootBlues {
                         pi.Channel.Receive(), processExit
                     );
                     pi.Ready = true;
+
+                    // Now that we know our payload thread is running (because it sent 
+                    //  us a message), we can re-enable DLL_THREAD_ATTACH
+                    kfd.Dispose();
 
                     var fRpcTask = Scheduler.Start(RPCTask(pi), TaskExecutionPolicy.RunWhileFutureLives);
 
