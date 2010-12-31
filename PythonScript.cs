@@ -82,6 +82,8 @@ namespace ShootBlues {
             yield return Program.LoadPythonScript(
                 process, ModuleName, ScriptText
             );
+
+            DisposeFuturesForProcess(process);
         }
 
         public override IEnumerator<object> LoadedInto (ProcessInfo process) {
@@ -96,6 +98,8 @@ namespace ShootBlues {
 
             if (Program.PythonModuleToScript.ContainsKey(ModuleName))
                 Program.PythonModuleToScript.Remove(ModuleName);
+
+            DisposeFuturesForProcess(process);
         }
     }
 }

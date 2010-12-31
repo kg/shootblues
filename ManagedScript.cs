@@ -74,7 +74,8 @@ namespace ShootBlues {
     }
 
     public abstract class ManagedScript : DependencyManager, IManagedScript {
-        protected EventSubscription _PreferencesChangedEvt;        
+        protected EventSubscription _PreferencesChangedEvt;
+        protected readonly Dictionary<ProcessInfo, HashSet<IFuture>> _OwnedFutures = new Dictionary<ProcessInfo,HashSet<IFuture>>();
         private PreferenceStore _Preferences = null;
 
         protected ConnectionWrapper Database {
@@ -115,6 +116,32 @@ namespace ShootBlues {
             Name = name;
         }
 
+        public IFuture Start (ProcessInfo process, ISchedulable task) {
+            HashSet<IFuture> of = null;
+            if (!_OwnedFutures.TryGetValue(process, out of)) {
+                of = new HashSet<IFuture>();
+                _OwnedFutures[process] = of;
+            }
+
+            var f = process.Start(task);
+            of.Add(f);
+            return f;
+        }
+
+        public IFuture Start (ProcessInfo process, IEnumerator<object> task) {
+            return this.Start(process, new SchedulableGeneratorThunk(task));
+        }
+
+        protected void DisposeFuturesForProcess (ProcessInfo process) {
+            HashSet<IFuture> of = null;
+            if (_OwnedFutures.TryGetValue(process, out of)) {
+                foreach (var f in of)
+                    f.Dispose();
+
+                of.Clear();
+            }
+        }
+
         protected IEnumerator<object> CallFunction (string moduleName, string functionName, params object[] arguments) {
             foreach (var process in Program.GetProcessesRunningScript(this))
                 yield return Program.CallFunction(process, moduleName, functionName, arguments);
@@ -125,6 +152,8 @@ namespace ShootBlues {
         }
 
         public virtual IEnumerator<object> LoadInto (ProcessInfo process) {
+            DisposeFuturesForProcess(process);
+
             yield break;
         }
 
@@ -133,6 +162,8 @@ namespace ShootBlues {
         }
 
         public virtual IEnumerator<object> UnloadFrom (ProcessInfo process) {
+            DisposeFuturesForProcess(process);
+
             yield break;
         }
 
