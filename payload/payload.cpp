@@ -235,18 +235,6 @@ int addModuleString (const char * moduleName, const char * script, int messageId
   return result;
 }
 
-PyObject * addModule (PyObject * self, PyObject * args) {
-  const char * moduleName, * script;
-  if (!PyArg_ParseTuple(args, "ss", &moduleName, &script))
-    return NULL;
-
-  if (addModuleString(moduleName, script, 0) != 0) {
-    PyErr_SetString(g_excException, "addModule failed to add module");
-    return NULL;
-  } else
-    return Py_BuildValue("");
-}
-
 int removeModuleString (const char * moduleName, int messageId) {
   PyObject * nameString = PyString_FromString(moduleName);
   PyList_Append(g_unloadedModules, nameString);
@@ -267,19 +255,7 @@ int removeModuleString (const char * moduleName, int messageId) {
   return result;
 }
 
-PyObject * removeModule (PyObject * self, PyObject * args) {
-  const char *moduleName;
-  if (!PyArg_ParseTuple(args, "s", &moduleName))
-    return NULL;
-
-  if (removeModuleString(moduleName, 0) != 0) {
-    PyErr_SetString(g_excException, "removeModule failed to remove module");
-    return NULL;
-  } else
-    return Py_BuildValue("");
-}
-
-PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId) {
+void reloadModulesWithId (int messageId) {
   PyObject * moduleNames = PyMapping_Keys(g_moduleDict);
   PyObject * sysModules = PyObject_GetAttrString(g_sysModule, "modules");
 
@@ -389,11 +365,6 @@ PyObject * reloadModulesWithId (PyObject * self, PyObject * args, int messageId)
   }
   
   Py_DECREF(loadedModules);
-  return Py_BuildValue("");
-}
-
-PyObject * reloadModules (PyObject * self, PyObject * args) {
-  return reloadModulesWithId(self, args, 0);
 }
 
 PyObject * findModule (PyObject * self, PyObject * args, PyObject * kwargs) {
@@ -497,9 +468,6 @@ PyObject * noOp (PyObject * self, PyObject * args) {
 static PyMethodDef PythonMethods[] = {
   {"rpcSend", (PyCFunction)rpcSend, METH_KEYWORDS, "Send an RPC message to the parent process."},
   {"run", (PyCFunction)run, METH_KEYWORDS, "Compiles and runs a script block."},
-  {"addModule", addModule, METH_VARARGS, "Adds a new script module or replaces an existing script module."},
-  {"removeModule", removeModule, METH_VARARGS, "Removes an existing script module."},
-  {"reloadModules", reloadModules, METH_VARARGS, "Reloads all script modules."},
   {"createChannel", createRpcChannel, METH_VARARGS, "Creates an RPC response channel."},
   {"find_module", (PyCFunction)findModule, METH_KEYWORDS, "Implements the Finder protocol (PEP 302)."},
   {"load_module", loadModule, METH_VARARGS, "Implements the Loader protocol (PEP 302)."},
@@ -614,11 +582,9 @@ DWORD __stdcall payload (HWND rpcWindow) {
       case RMT_RemoveModule:
         removeModuleString(rpc->moduleName, rpc->messageId);
         break;
-      case RMT_ReloadModules: {
-        PyObject * result = reloadModulesWithId(0, 0, rpc->messageId);
-        Py_XDECREF(result);
+      case RMT_ReloadModules:
+        reloadModulesWithId(rpc->messageId);
         break;
-      } 
       case RMT_CallFunction:
         callFunction(rpc->moduleName, rpc->functionName, rpc->text, rpc->messageId);
         break;

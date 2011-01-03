@@ -101,5 +101,13 @@ namespace ShootBlues {
 
             DisposeFuturesForProcess(process);
         }
+
+        public IEnumerator<object> GetPreference (ProcessInfo process, string name) {
+            return Preferences.Get<object>(name);
+        }
+
+        public IEnumerator<object> SetPreference (ProcessInfo process, string name, object value) {
+            return Preferences.Set<object>(name, value);
+        }
     }
 }

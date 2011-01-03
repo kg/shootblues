@@ -75,7 +75,6 @@
       <DependentUpon>EnterPythonDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="ErrorDialog.cs">
-      <SubType>Form</SubType>
     </Compile>
     <Compile Include="ErrorDialog.Designer.cs">
       <DependentUpon>ErrorDialog.cs</DependentUpon>
@@ -92,11 +91,9 @@
     <Compile Include="Preferences.cs" />
     <Compile Include="PythonScript.cs" />
     <Compile Include="SimpleConfigPanel.cs">
-      <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="SimpleExecutableProfile.cs" />
     <Compile Include="StatusWindow.cs">
-      <SubType>Form</SubType>
     </Compile>
     <Compile Include="StatusWindow.Designer.cs">
       <DependentUpon>StatusWindow.cs</DependentUpon>
