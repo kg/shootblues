@@ -184,8 +184,8 @@ namespace ShootBlues {
         internal HashSet<ScriptName> LoadedScripts = new HashSet<ScriptName>();
         internal HashSet<string> LoadedPythonModules = new HashSet<string>();
         internal List<Func<IFuture>> PendingFunctionCalls = new List<Func<IFuture>>();
+        public readonly OwnedFutureSet OwnedFutures = new OwnedFutureSet();
         private Dictionary<string, RPCResponseChannel> NamedChannels = new Dictionary<string, RPCResponseChannel>();
-        private HashSet<IFuture> OwnedFutures = new HashSet<IFuture>();
 
         public ProcessInfo (Process process) {
             Process = process;
@@ -217,9 +217,7 @@ namespace ShootBlues {
         }
 
         public void Dispose () {
-            foreach (var f in OwnedFutures)
-                f.Dispose();
-            OwnedFutures.Clear();
+            OwnedFutures.Dispose();
 
             foreach (var nc in NamedChannels.Values)
                 nc.Dispose();

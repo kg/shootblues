@@ -75,7 +75,7 @@ namespace ShootBlues {
 
     public abstract class ManagedScript : DependencyManager, IManagedScript {
         protected EventSubscription _PreferencesChangedEvt;
-        protected readonly Dictionary<ProcessInfo, HashSet<IFuture>> _OwnedFutures = new Dictionary<ProcessInfo,HashSet<IFuture>>();
+        protected readonly Dictionary<ProcessInfo, OwnedFutureSet> _OwnedFutures = new Dictionary<ProcessInfo, OwnedFutureSet>();
         private PreferenceStore _Preferences = null;
 
         protected ConnectionWrapper Database {
@@ -117,9 +117,9 @@ namespace ShootBlues {
         }
 
         public IFuture Start (ProcessInfo process, ISchedulable task) {
-            HashSet<IFuture> of = null;
+            OwnedFutureSet of = null;
             if (!_OwnedFutures.TryGetValue(process, out of)) {
-                of = new HashSet<IFuture>();
+                of = new OwnedFutureSet();
                 _OwnedFutures[process] = of;
             }
 
@@ -133,12 +133,10 @@ namespace ShootBlues {
         }
 
         protected void DisposeFuturesForProcess (ProcessInfo process) {
-            HashSet<IFuture> of = null;
+            OwnedFutureSet of = null;
             if (_OwnedFutures.TryGetValue(process, out of)) {
-                foreach (var f in of)
-                    f.Dispose();
-
-                of.Clear();
+                _OwnedFutures.Remove(process);
+                of.Dispose();
             }
         }
 
