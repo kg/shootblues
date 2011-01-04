@@ -220,6 +220,7 @@ namespace ShootBlues {
 
                 if (!Win32.PostThreadMessage(RemoteThreadId, WM_RPC_MESSAGE, region.Address, region.Size)) {
                     var error = Win32.GetLastError();
+                    region.Dispose();
                     throw new Exception(String.Format("Error posting thread message: {0:x8}", error));
                 }
             }

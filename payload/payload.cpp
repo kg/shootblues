@@ -41,14 +41,17 @@ static PyObject * g_typeNamedChannel;
 PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
   static char * kwlist[] = {"messageBody", "id", NULL};
   char * messageBody = 0;
+  int messageBodyLen = 0;
   unsigned int messageId = 0;
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "z|I", kwlist, &messageBody, &messageId))
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "z#|I", kwlist, &messageBody, &messageBodyLen, &messageId))
     return NULL;
 
   // Allocate enough memory to hold our message body and store it there
   size_t regionSize = 4;
   if (messageBody)
-    regionSize += strlen(messageBody) + 1;
+    regionSize += messageBodyLen + 1;
+
   LPVOID region = VirtualAlloc(0, regionSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   if (region) {
     *reinterpret_cast<unsigned int *>(region) = messageId;
@@ -71,8 +74,11 @@ PyObject * rpcSend (PyObject * self, PyObject * args, PyObject * kwargs) {
       rpcWindow, g_rpcMessageId, 
       reinterpret_cast<WPARAM>(region), 
       *reinterpret_cast<LPARAM *>(&regionSize)
-    ))
+    )) {
       return Py_BuildValue("");
+    } else {
+      VirtualFree(region, 0, MEM_RELEASE);
+    }
   }
 
   PyErr_SetFromWindowsErr(GetLastError());
@@ -596,7 +602,7 @@ DWORD __stdcall payload (HWND rpcWindow) {
     PyGILState_Release(gil);
 
     // Free the memory block containing the message body since we've parsed it now
-    VirtualFree(rpc, rpcSize, MEM_RELEASE);
+    VirtualFree(rpc, 0, MEM_RELEASE);
   }
 
   return 0;
