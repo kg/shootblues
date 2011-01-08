@@ -55,28 +55,22 @@ namespace ShootBlues {
         }
 
         public static Finally SuspendProcess (Process process) {
-            var suspendedThreads = new HashSet<Int64>();
+            var suspendedThreads = new HashSet<IntPtr>();
 
             foreach (ProcessThread thread in process.Threads) {
                 var hThread = Win32.OpenThread(ThreadAccessFlags.SuspendResume, false, thread.Id);
                 if (hThread != IntPtr.Zero) {
-                    suspendedThreads.Add(hThread.ToInt64());
+                    suspendedThreads.Add(hThread);
                     Win32.SuspendThread(hThread);
-                    Win32.CloseHandle(hThread);
                 } else {
                     Console.WriteLine("Could not open thread {0}", thread.Id);
                 }
             }
 
             return Finally.Do(() => {
-                foreach (ProcessThread thread in process.Threads) {
-                    var hThread = Win32.OpenThread(ThreadAccessFlags.SuspendResume, false, thread.Id);
-                    if ((hThread != IntPtr.Zero) && (suspendedThreads.Contains(hThread.ToInt64()))) {
-                        Win32.ResumeThread(hThread);
-                        Win32.CloseHandle(hThread);
-                    } else {
-                        Console.WriteLine("Could not resume thread {0}", thread.Id);
-                    }
+                foreach (IntPtr hThread in suspendedThreads) {
+                    Win32.ResumeThread(hThread);
+                    Win32.CloseHandle(hThread);
                 }
             });
         }
