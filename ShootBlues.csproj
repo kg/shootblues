@@ -75,7 +75,6 @@
       <DependentUpon>EnterPythonDialog.cs</DependentUpon>
     </Compile>
     <Compile Include="ErrorDialog.cs">
-      <SubType>Form</SubType>
     </Compile>
     <Compile Include="ErrorDialog.Designer.cs">
       <DependentUpon>ErrorDialog.cs</DependentUpon>

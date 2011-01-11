@@ -315,13 +315,19 @@ namespace ShootBlues {
             Environment.Exit(ExitCode);
         }
 
-        private static SQLiteConnection OpenDatabase () {
+        public static string GetDataFolder () {
             var dataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "ShootBlues"
             );
             if (!Directory.Exists(dataFolder))
                 Directory.CreateDirectory(dataFolder);
+
+            return dataFolder;
+        }
+
+        private static SQLiteConnection OpenDatabase () {
+            var dataFolder = GetDataFolder();
 
             var dbPath = Path.Combine(
                 dataFolder, "prefs.db"
@@ -507,20 +513,34 @@ namespace ShootBlues {
                 dbName + ".db"
             ));
 
+            yield return AttachDB(dbPath, dbName);
+        }
+
+        public static IEnumerator<object> AttachDB (string dbPath, string dbName) {
             if (AttachedDatabases.Contains(dbName))
                 yield break;
 
             AttachedDatabases.Add(dbName);
 
             yield return Database.ExecuteSQL(String.Format(
-                "ATTACH DATABASE '{0}' AS {1}", dbPath, dbName
+                "ATTACH DATABASE '{0}' AS {1}", dbPath.Replace("'", "''"), dbName
             ));
         }
 
         public static IEnumerator<object> DefaultTableConverter (string oldTableName, string newTableName, string oldTableSql, string newTableSql) {
             string sql;
+            string[] oldColumnNames = null, newColumnNames = null;
 
-            using (var q = Database.BuildQuery(String.Format("SELECT * FROM {0}", oldTableName))) {
+            using (var q = Database.BuildQuery(String.Format("SELECT * FROM {0} LIMIT 0", oldTableName)))
+                yield return q.GetColumnNames().Bind(() => oldColumnNames);
+
+            using (var q = Database.BuildQuery(String.Format("SELECT * FROM {0} LIMIT 0", newTableName)))
+                yield return q.GetColumnNames().Bind(() => newColumnNames);
+
+            var sharedColumns = new HashSet<string>(oldColumnNames);
+            sharedColumns.IntersectWith(newColumnNames);
+
+            using (var q = Database.BuildQuery(String.Format("SELECT {1} FROM {0}", oldTableName, string.Join(", ", sharedColumns.ToArray())))) {
                 var fReader = q.ExecuteReader();
                 yield return fReader;
 
@@ -532,7 +552,7 @@ namespace ShootBlues {
                         columnNames[i] = reader.GetName(i);
 
                     sql = String.Format(
-                        "INSERT INTO {0} ({2}) SELECT {2} FROM {1}", newTableName, oldTableName, String.Join(", ", columnNames)
+                        "INSERT INTO {0} ({2}) SELECT {2} FROM {1}", newTableName, oldTableName, String.Join(", ", sharedColumns.ToArray())
                     );
                 }
             }
@@ -545,6 +565,14 @@ namespace ShootBlues {
         }
 
         public static IEnumerator<object> CreateDBTable (string tableName, string tableDef, TableConverterTask tableConverter) {
+            string dbName = "";
+
+            if (tableName.Contains(".")) {
+                var parts = tableName.Split('.');
+                dbName = parts[0] + ".";
+                tableName = parts[1];
+            }
+
             tableDef = tableDef.Trim();
 
             string sql = null;
@@ -554,21 +582,25 @@ namespace ShootBlues {
             using (var xact = Database.CreateTransaction(true)) {
                 yield return xact;
 
-                using (var q = Database.BuildQuery(@"SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type = 'table'"))
+                using (var q = Database.BuildQuery(String.Format(
+                    @"SELECT sql FROM {0}sqlite_master WHERE tbl_name = ? AND type = 'table'",
+                    dbName
+                )))
                     yield return q.ExecuteScalar<string>(tableName).Bind(() => sql);
 
                 if (String.Compare(sql, newSql, true) == 0)
                     yield break;
 
                 if (sql != null)
-                    yield return Database.ExecuteSQL(String.Format("ALTER TABLE {0} RENAME TO {1}", tableName, oldName));
+                    yield return Database.ExecuteSQL(String.Format("ALTER TABLE {2}{0} RENAME TO {1}", tableName, oldName, dbName));
 
+                newSql = String.Format("CREATE TABLE {2}{0} {1}", tableName, tableDef, dbName);
                 yield return Database.ExecuteSQL(newSql);
 
                 if (sql != null) {
-                    yield return tableConverter(oldName, tableName, sql, newSql);
+                    yield return tableConverter(dbName + oldName, dbName + tableName, sql, newSql);
 
-                    yield return Database.ExecuteSQL(String.Format("DROP TABLE {0}", oldName));
+                    yield return Database.ExecuteSQL(String.Format("DROP TABLE {1}{0}", oldName, dbName));
                 }
                 yield return xact.Commit();
             }
@@ -1296,6 +1328,15 @@ rpcSend(result, id={1}L)", pythonText, messageID
 
             var instance = GetScriptInstance(new ScriptName(scriptName));
             return instance as T;
+        }
+
+        public static IEnumerable<T> GetScriptInstances<T> () {
+            var tTarget = typeof(T);
+
+            foreach (var instance in LoadedScripts.Values) {
+                if (tTarget.IsAssignableFrom(instance.GetType()))
+                    yield return (T)instance;
+            }
         }
     }
 
