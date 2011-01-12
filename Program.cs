@@ -905,9 +905,12 @@ namespace ShootBlues {
                     RunningProcesses.Add(pi);
                     pi.Status = "Waiting for startup";
 
-                    yield return Future.WaitForFirst(
-                        pi.Channel.Receive(), processExit
-                    );
+                    var nextMsg = pi.Channel.Receive();
+                    using (nextMsg)
+                        yield return Future.WaitForFirst(
+                            nextMsg, processExit
+                        );
+
                     pi.Ready = true;
 
                     // Now that we know our payload thread is running (because it sent 
@@ -1310,7 +1313,9 @@ rpcSend(result, id={1}L)", pythonText, messageID
         private static IEnumerator<object> RPCTask (ProcessInfo pi) {
             while (true) {
                 var fMessage = pi.Channel.Receive();
-                yield return fMessage;
+
+                using (fMessage)
+                    yield return fMessage;
 
                 var errorText = fMessage.Result.DecodeAsciiZ();
                 Program.ShowErrorMessage(errorText, pi);

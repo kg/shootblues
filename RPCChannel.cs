@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using Squared.Task;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace ShootBlues {
     public enum RPCMessageType : uint {
@@ -100,10 +101,15 @@ namespace ShootBlues {
                     messageData = ReadRemoteData(region, out messageID);
 
                 Future<byte[]> fResult;
+                Monitor.Enter(_AwaitingResponses);
                 if (_AwaitingResponses.TryGetValue(messageID, out fResult)) {
                     _AwaitingResponses.Remove(messageID);
+                    Monitor.Exit(_AwaitingResponses);
                     fResult.SetResult(messageData, null);
                 } else {
+                    Debug.Assert(messageID == 0);
+
+                    Monitor.Exit(_AwaitingResponses);
                     _Messages.Enqueue(messageData);
                 }
             } else {
@@ -122,8 +128,13 @@ namespace ShootBlues {
         }
 
         public Future<byte[]> WaitForMessage (UInt32 messageID) {
-            var result = new Future<byte[]>();
-            _AwaitingResponses[messageID] = result;
+            Future<byte[]> result;
+
+            lock (_AwaitingResponses) {
+                if (!_AwaitingResponses.TryGetValue(messageID, out result))
+                    _AwaitingResponses[messageID] = result = new Future<byte[]>();
+            }
+
             return result;
         }
 

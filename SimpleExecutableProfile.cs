@@ -28,7 +28,9 @@ namespace ShootBlues {
         public virtual IEnumerator<object> Run () {
             while (Watcher != null) {
                 var fNewProcess = Watcher.NewProcesses.Dequeue();
-                yield return fNewProcess;
+
+                using (fNewProcess)
+                    yield return fNewProcess;
 
                 var process = fNewProcess.Result;
 
