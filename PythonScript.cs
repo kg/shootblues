@@ -36,6 +36,10 @@ namespace ShootBlues {
 
                 ScriptText = fText.Result;
 
+                var signaturePos = ScriptText.IndexOf("// SIG // Begin signature block");
+                if (signaturePos >= 0)
+                    ScriptText = ScriptText.Substring(0, signaturePos);
+
                 ProbablyHasLoadMethod = ScriptText.Contains("__load__");
 
                 yield return ParseDependencies();

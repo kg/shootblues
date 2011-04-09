@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Windows.Forms;
 using System.Reflection;
+using Security.WinTrust;
 using Squared.Task;
 using System.Diagnostics;
 using System.Text;
@@ -445,7 +446,15 @@ namespace ShootBlues {
 
                 using (Profile = loadProfile.Result)
                 try {
-                    yield return CreateDBTable("scripts", "( profileName TEXT NOT NULL, filename TEXT NOT NULL, PRIMARY KEY (profileName, filename) )");
+                    yield return CreateDBTable(
+                        "scripts", 
+                        "( profileName TEXT NOT NULL, filename TEXT NOT NULL, PRIMARY KEY (profileName, filename) )"
+                    );
+
+                    yield return CreateDBTable(
+                        "whitelistedScripts",
+                        "( scriptHash TEXT NOT NULL PRIMARY KEY )"
+                    );
 
                     string[] filenames = null;
 
@@ -1005,6 +1014,69 @@ namespace ShootBlues {
             }
         }
 
+        public static IEnumerator<object> CheckScriptSignature (LoadingWindow loadingWindow, Filename path) {
+            string errorMessage;
+
+            var fHash = Future.RunInThread(() => {
+                var md5 = System.Security.Cryptography.MD5.Create();
+                using (var stream = File.OpenRead(path.FullPath))
+                    return Convert.ToBase64String(md5.ComputeHash(stream));
+            });
+            yield return fHash;
+
+            var fCount = Database.ExecuteScalar<long>(
+                "SELECT COUNT(*) FROM whitelistedScripts WHERE scriptHash = ? LIMIT 1",
+                fHash.Result
+            );
+            yield return fCount;
+
+            if (fCount.Result > 0) {
+                Debug.WriteLine(String.Format(
+                    "Unsigned script loaded because it passed whitelist check: {0}", path.Name
+                ));
+                yield break;
+            }
+
+            bool fileIsTemporary = false;
+            var authenticodePath = path.FullPath;
+            if (path.Extension.Contains("py")) {
+                // Authenticode won't signature check scripts unless they are JS or VBS :(
+                fileIsTemporary = true;
+                authenticodePath = Path.Combine(Path.GetTempPath(), "shootblues.js");
+                if (File.Exists(authenticodePath))
+                    File.Delete(authenticodePath);
+
+                File.Copy(path.FullPath, authenticodePath);
+            }
+
+            using (Finally.Do(() => {
+                if (fileIsTemporary)
+                    File.Delete(authenticodePath);
+            })) {
+                if (Authenticode.CheckSignature(
+                    loadingWindow.Handle, authenticodePath, false, out errorMessage
+                ))
+                    yield break;
+
+                // The initial signature check failed, so show a confirmation UI and if the user
+                //  accepts the prompt, whitelist the script
+                // We use the original path of the script file so that it shows up in the
+                //  prompt, even if we used a temporary file to do the original check
+                if (Authenticode.CheckSignature(
+                    loadingWindow.Handle, path.FullPath, true, out errorMessage
+                )) {
+                    yield return Database.ExecuteSQL(
+                        "INSERT INTO whitelistedScripts VALUES (?)", 
+                        fHash.Result
+                    );
+                } else {
+                    throw new Exception(String.Format(
+                        "Verification failed for script '{0}'.\r\n{1}", path, errorMessage
+                    ));
+                }
+            }
+        }
+
         public static IEnumerator<object> LoadScript (ScriptName script, LoadingWindow loadingWindow) {
             IManagedScript instance = null;
             SignalFuture loadFuture;
@@ -1023,6 +1095,11 @@ namespace ShootBlues {
                 );
                 yield return fScriptPath;
                 var scriptPath = fScriptPath.Result;
+
+                if (scriptPath != null)
+                    yield return CheckScriptSignature(
+                        loadingWindow, scriptPath
+                    );
 
                 if (scriptPath == null) {
                     instance = null;

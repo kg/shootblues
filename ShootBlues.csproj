@@ -96,6 +96,7 @@
     <Compile Include="ManagedScript.cs" />
     <Compile Include="Preferences.cs" />
     <Compile Include="PythonScript.cs" />
+    <Compile Include="SignatureCheck.cs" />
     <Compile Include="SimpleConfigPanel.cs">
       <SubType>UserControl</SubType>
     </Compile>

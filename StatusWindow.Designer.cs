@@ -42,6 +42,7 @@
             this.RunningProcessGroupBox.SuspendLayout();
             this.ButtonPanel.SuspendLayout();
             this.ProcessMenu.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.SplitContainer)).BeginInit();
             this.SplitContainer.Panel1.SuspendLayout();
             this.SplitContainer.Panel2.SuspendLayout();
             this.SplitContainer.SuspendLayout();
@@ -143,8 +144,8 @@
             this.ScriptsList.ShowNodeToolTips = true;
             this.ScriptsList.Size = new System.Drawing.Size(383, 329);
             this.ScriptsList.TabIndex = 0;
-            this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
             this.ScriptsList.AfterSelect += new System.Windows.Forms.TreeViewEventHandler(this.ScriptsList_AfterSelect);
+            this.ScriptsList.DragDrop += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragDrop);
             this.ScriptsList.DragOver += new System.Windows.Forms.DragEventHandler(this.ScriptsList_DragOver);
             // 
             // ScriptImageList
@@ -153,6 +154,7 @@
             this.ScriptImageList.TransparentColor = System.Drawing.Color.Fuchsia;
             this.ScriptImageList.Images.SetKeyName(0, "missing");
             this.ScriptImageList.Images.SetKeyName(1, "optional");
+            this.ScriptImageList.Images.SetKeyName(2, "signed");
             // 
             // ProcessMenu
             // 
@@ -235,6 +237,7 @@
             this.ProcessMenu.ResumeLayout(false);
             this.SplitContainer.Panel1.ResumeLayout(false);
             this.SplitContainer.Panel2.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.SplitContainer)).EndInit();
             this.SplitContainer.ResumeLayout(false);
             this.ScriptsPanel.ResumeLayout(false);
             this.ResumeLayout(false);
