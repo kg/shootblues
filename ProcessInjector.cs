@@ -111,16 +111,16 @@ namespace ShootBlues {
             return buffer;
         }
 
-        public MemoryProtection Protect (SafeProcessHandle handle, uint offset, uint size, MemoryProtection newProtect) {
+        public void Protect (SafeProcessHandle handle, uint offset, uint size, MemoryProtection newProtect) {
             if (Address == IntPtr.Zero)
                 throw new ObjectDisposedException("RemoteMemoryRegion");
-            if ((offset + size) > Size)
+            if ((offset + size) > (Size))
                 throw new ArgumentException("Size too large for region");
 
             MemoryProtection oldProtect;
             int result = Win32.VirtualProtectEx(
                 handle.DangerousGetHandle(),
-                (uint)(Address.ToInt64() + offset), 
+                (uint)(Address.ToInt64() + offset),
                 size, newProtect, out oldProtect
             );
 
@@ -128,8 +128,6 @@ namespace ShootBlues {
                 var error = Win32.GetLastError();
                 throw new Exception(String.Format("Protect failed: Error {0:x8}", error));
             }
-
-            return oldProtect;
         }
 
         public SafeProcessHandle OpenHandle (ProcessAccessFlags flags) {

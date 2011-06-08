@@ -94,14 +94,14 @@ namespace ShootBlues {
             var region = GetFunctionRegion(moduleName, functionName, replacementBytes);
             using (var suspend = SuspendProcess(Process))
             using (var handle = region.OpenHandle(ProcessAccessFlags.VMOperation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite)) {
-                var oldProtect = region.Protect(handle, 0, region.Size, MemoryProtection.ReadWrite);
+                region.Protect(handle, 0, region.Size, MemoryProtection.ReadWrite);
                 try {
                     var oldBytes = region.ReadBytes(handle, 0, region.Size);
                     DisabledFunctions[key] = oldBytes;
                     fixed (byte* pReplacement = replacementBytes)
                         region.Write(handle, 0, region.Size, pReplacement);
                 } finally {
-                    region.Protect(handle, 0, region.Size, oldProtect);
+                    region.Protect(handle, 0, region.Size, MemoryProtection.ExecuteRead);
                 }
             }
         }
@@ -124,12 +124,12 @@ namespace ShootBlues {
             var region = GetFunctionRegion(moduleName, functionName, oldBytes);
             using (var suspend = SuspendProcess(Process))
             using (var handle = region.OpenHandle(ProcessAccessFlags.VMOperation | ProcessAccessFlags.VMRead | ProcessAccessFlags.VMWrite)) {
-                var oldProtect = region.Protect(handle, 0, region.Size, MemoryProtection.ReadWrite);
+                region.Protect(handle, 0, region.Size, MemoryProtection.ReadWrite);
                 try {
                     fixed (byte* pOldBytes = oldBytes)
                         region.Write(handle, 0, region.Size, pOldBytes);
                 } finally {
-                    region.Protect(handle, 0, region.Size, oldProtect);
+                    region.Protect(handle, 0, region.Size, MemoryProtection.ExecuteRead);
                 }
             }
         }
